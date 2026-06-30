@@ -46,3 +46,7 @@ app.*.map.json
 
 # Zip package
 hepb_analyzer_web.zip
+
+# Hive database files
+*.hive
+*.lock
