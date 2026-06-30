@@ -127,6 +127,18 @@ class AnalysisProvider extends ChangeNotifier {
     _uniqueTestNames = testsSet.toList()..sort();
   }
 
+  // Helper: Extract primitive types (String, num, bool) from excel package's CellValue subclasses
+  dynamic _cleanCellValue(dynamic val) {
+    if (val == null) return null;
+    if (val is num || val is String || val is bool) return val;
+    // Recursive extraction for CellValue wraps
+    try {
+      final dynamic inner = (val as dynamic).value;
+      if (inner != null) return _cleanCellValue(inner);
+    } catch (_) {}
+    return val.toString();
+  }
+
   // Unified File Parsing Entrypoint
   Future<void> parseFile(Uint8List bytes, String name, int size) async {
     _isLoading = true;
@@ -342,12 +354,13 @@ class AnalysisProvider extends ChangeNotifier {
 
       if (row.length <= colMap['value']! || row.length <= colMap['testName']!) continue;
 
-      final gender = row[colMap['gender']!]?.value?.toString().trim() ?? 'Unknown';
-      final dob = row[colMap['dob']!]?.value?.toString().trim() ?? 'Unknown';
-      final region = row[colMap['region']!]?.value?.toString().trim() ?? 'Unknown';
-      final testName = row[colMap['testName']!]?.value?.toString().trim().toUpperCase() ?? '';
-      final resultYearStr = row[colMap['year']!]?.value?.toString().trim() ?? '2025';
-      final resultValue = row[colMap['value']!]?.value;
+      // Extract and clean values to primitive Dart types
+      final gender = _cleanCellValue(row[colMap['gender']!]?.value)?.toString().trim() ?? 'Unknown';
+      final dob = _cleanCellValue(row[colMap['dob']!]?.value)?.toString().trim() ?? 'Unknown';
+      final region = _cleanCellValue(row[colMap['region']!]?.value)?.toString().trim() ?? 'Unknown';
+      final testName = _cleanCellValue(row[colMap['testName']!]?.value)?.toString().trim().toUpperCase() ?? '';
+      final resultYearStr = _cleanCellValue(row[colMap['year']!]?.value)?.toString().trim() ?? '2025';
+      final resultValue = _cleanCellValue(row[colMap['value']!]?.value);
 
       if (testName.isEmpty || resultValue == null) continue;
 
