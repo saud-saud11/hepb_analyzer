@@ -188,4 +188,85 @@ void main() {
       expect(patient.getBooleanValue(testName), false);
     });
   });
+
+  group('Age Group Distribution Analysis Tests', () {
+    test('Correctly clusters patients into Under 15, 15-29, 30-44, 45-59, 60+', () async {
+      final provider = AnalysisProvider();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      await provider.clearCache();
+
+      // Under 15 (e.g. Born 2015, test 2025 -> Age 10)
+      await provider.addManualRecord(
+        gender: 'Male',
+        dob: '2015',
+        region: 'Riyadh',
+        testName: 'ALT',
+        year: 2025,
+        value: 30,
+      );
+
+      // 15 - 29 (e.g. Born 2005, test 2025 -> Age 20)
+      await provider.addManualRecord(
+        gender: 'Female',
+        dob: '2005',
+        region: 'Riyadh',
+        testName: 'ALT',
+        year: 2025,
+        value: 30,
+      );
+
+      // 30 - 44 (e.g. Born 1990, test 2025 -> Age 35)
+      await provider.addManualRecord(
+        gender: 'Male',
+        dob: '1990',
+        region: 'Riyadh',
+        testName: 'ALT',
+        year: 2025,
+        value: 30,
+      );
+
+      // 45 - 59 (e.g. Born 1975, test 2025 -> Age 50)
+      await provider.addManualRecord(
+        gender: 'Female',
+        dob: '1975',
+        region: 'Riyadh',
+        testName: 'ALT',
+        year: 2025,
+        value: 30,
+      );
+
+      // 60+ (e.g. Born 1960, test 2025 -> Age 65)
+      await provider.addManualRecord(
+        gender: 'Male',
+        dob: '1960',
+        region: 'Riyadh',
+        testName: 'ALT',
+        year: 2025,
+        value: 30,
+      );
+
+      final distribution = provider.ageGroupDistribution;
+
+      final under15 = distribution.firstWhere((g) => g['group'] == 'Under 15');
+      final group15to29 = distribution.firstWhere((g) => g['group'] == '15 - 29');
+      final group30to44 = distribution.firstWhere((g) => g['group'] == '30 - 44');
+      final group45to59 = distribution.firstWhere((g) => g['group'] == '45 - 59');
+      final group60plus = distribution.firstWhere((g) => g['group'] == '60+');
+
+      expect(under15['count'], 1);
+      expect(under15['males'], 1);
+      expect(under15['females'], 0);
+      expect(under15['percentage'], 20.0);
+
+      expect(group15to29['count'], 1);
+      expect(group15to29['males'], 0);
+      expect(group15to29['females'], 1);
+      expect(group15to29['percentage'], 20.0);
+
+      expect(group30to44['count'], 1);
+      expect(group45to59['count'], 1);
+      expect(group60plus['count'], 1);
+    });
+  });
 }

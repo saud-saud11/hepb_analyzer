@@ -554,6 +554,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 20),
 
+                  // 2.5 Age Group Distribution Card
+                  _buildAgeGroupAnalysis(context, provider),
+
+                  const SizedBox(height: 20),
+
                   // 3. Region Analysis Prevalence Table
                   Card(
                     child: Padding(
@@ -874,6 +879,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Text(opt, style: const TextStyle(fontSize: 12)),
             );
           }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAgeGroupAnalysis(BuildContext context, AnalysisProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ageGroups = provider.ageGroupDistribution;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.cake_outlined,
+                  color: isDark ? AppColors.primaryTealLight : AppColors.primaryTeal,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Age Group Distribution & Analysis',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'تحليل وتوزيع الحالات حسب الفئات العمرية والنسب المئوية والنوع الاجتماعي',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            
+            // Age groups list
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: ageGroups.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                final group = ageGroups[index];
+                final double percent = group['percentage'] as double;
+                final int count = group['count'] as int;
+                final int males = group['males'] as int;
+                final int females = group['females'] as int;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          group['labelAr'].toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        Text(
+                          '$count patients (${percent.toStringAsFixed(1)}%)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? AppColors.primaryTealLight : AppColors.primaryTeal,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Stack(
+                      children: [
+                        Container(
+                          height: 12,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.grey[800] : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        FractionallySizedBox(
+                          widthFactor: percent > 0 ? (percent / 100).clamp(0.0, 1.0) : 0.0,
+                          child: Container(
+                            height: 12,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  isDark ? AppColors.primaryTealLight : AppColors.primaryTeal,
+                                  isDark ? AppColors.primaryTeal : AppColors.primaryTealDark,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$males Males / ذكور  •  $females Females / إناث',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

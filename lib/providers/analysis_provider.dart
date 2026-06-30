@@ -551,6 +551,61 @@ class AnalysisProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Age group distribution calculation
+  List<Map<String, dynamic>> get ageGroupDistribution {
+    final Map<String, List<Patient>> groups = {
+      'Under 15': [],
+      '15 - 29': [],
+      '30 - 44': [],
+      '45 - 59': [],
+      '60+': [],
+    };
+
+    for (var p in _filteredPatients) {
+      final age = p.getAgeInYear(p.getLatestYear());
+      if (age < 15) {
+        groups['Under 15']!.add(p);
+      } else if (age < 30) {
+        groups['15 - 29']!.add(p);
+      } else if (age < 45) {
+        groups['30 - 44']!.add(p);
+      } else if (age < 60) {
+        groups['45 - 59']!.add(p);
+      } else {
+        groups['60+']!.add(p);
+      }
+    }
+
+    final int total = _filteredPatients.length;
+    final List<Map<String, dynamic>> list = [];
+
+    final translations = {
+      'Under 15': 'Under 15 / أقل من 15',
+      '15 - 29': '15 - 29',
+      '30 - 44': '30 - 44',
+      '45 - 59': '45 - 59',
+      '60+': '60 and older / 60 فما فوق',
+    };
+
+    groups.forEach((label, patientsList) {
+      final count = patientsList.length;
+      final percent = total > 0 ? (count / total) * 100 : 0.0;
+      final males = patientsList.where((p) => p.gender.toLowerCase() == 'male' || p.gender.toLowerCase() == 'm').length;
+      final females = count - males;
+
+      list.add({
+        'group': label,
+        'labelAr': translations[label],
+        'count': count,
+        'percentage': double.parse(percent.toStringAsFixed(1)),
+        'males': males,
+        'females': females,
+      });
+    });
+
+    return list;
+  }
+
   // Stats Card Info
   int get totalPatientsCount => _filteredPatients.length;
   int get totalUniqueTestsCount => _uniqueTestNames.length;
