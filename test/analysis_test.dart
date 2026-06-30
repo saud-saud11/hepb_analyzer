@@ -42,8 +42,8 @@ void main() {
     });
 
     test('Saudi Region Populations exist', () {
-      expect(Patient.saudiRegionPopulations['Riyadh'], 8500000);
-      expect(Patient.saudiRegionPopulations['Makkah'], 9000000);
+      expect(Patient.saudiRegionPopulations['Riyadh'], 8591748);
+      expect(Patient.saudiRegionPopulations['Makkah'], 7769994);
       expect(Patient.saudiRegionPopulations.length, 13);
     });
   });

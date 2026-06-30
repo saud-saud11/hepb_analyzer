@@ -29,21 +29,21 @@ class Patient {
   // Map of testName -> Map of year -> value
   final Map<String, Map<int, dynamic>> testHistory;
 
-  // Saudi regional populations (2022 Census estimates)
+  // Saudi regional populations (General Authority for Statistics Census 2022)
   static const Map<String, int> saudiRegionPopulations = {
-    'Riyadh': 8500000,
-    'Makkah': 9000000,
-    'Eastern Province': 5100000,
-    'Madinah': 2400000,
-    'Asir': 2300000,
-    'Jazan': 1600000,
-    'Al-Qassim': 1500000,
-    'Tabuk': 1000000,
-    'Ha\'il': 750000,
-    'Najran': 600000,
-    'Al-Jawf': 550000,
-    'Al-Bahah': 500000,
-    'Northern Borders': 400000,
+    'Riyadh': 8591748,
+    'Makkah': 7769994,
+    'Eastern Province': 5125254,
+    'Madinah': 2389452,
+    'Asir': 2024285,
+    'Jazan': 1404997,
+    'Al-Qassim': 1336179,
+    'Tabuk': 886036,
+    'Ha\'il': 746406,
+    'Najran': 592300,
+    'Al-Jawf': 595822,
+    'Al-Bahah': 339174,
+    'Northern Borders': 373577,
   };
 
   Patient({
