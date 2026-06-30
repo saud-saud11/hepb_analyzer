@@ -972,7 +972,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               gradient: LinearGradient(
                                 colors: [
                                   isDark ? AppColors.primaryTealLight : AppColors.primaryTeal,
-                                  isDark ? AppColors.primaryTeal : AppColors.primaryTealDark,
+                                  isDark ? AppColors.primaryTeal : AppColors.primaryTeal.withOpacity(0.8),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(6),
