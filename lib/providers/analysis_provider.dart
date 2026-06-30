@@ -20,14 +20,13 @@ class AnalysisProvider extends ChangeNotifier {
   // Filters
   String _selectedGender = 'All';
   String _selectedRegion = 'All';
-  String _selectedPhase = 'All';
-  String _selectedFibrosis = 'All';
   String _selectedYear = 'All';
   String _searchQuery = '';
 
   // Options lists populated from data
   List<String> _availableRegions = [];
   List<String> _availableYears = [];
+  List<String> _uniqueTestNames = [];
 
   // Getters
   List<Patient> get patients => _filteredPatients;
@@ -40,13 +39,12 @@ class AnalysisProvider extends ChangeNotifier {
 
   String get selectedGender => _selectedGender;
   String get selectedRegion => _selectedRegion;
-  String get selectedPhase => _selectedPhase;
-  String get selectedFibrosis => _selectedFibrosis;
   String get selectedYear => _selectedYear;
   String get searchQuery => _searchQuery;
 
   List<String> get availableRegions => _availableRegions;
   List<String> get availableYears => _availableYears;
+  List<String> get uniqueTestNames => _uniqueTestNames;
 
   AnalysisProvider() {
     _initHive();
@@ -94,10 +92,9 @@ class AnalysisProvider extends ChangeNotifier {
       _fileSize = null;
       _availableRegions = [];
       _availableYears = [];
+      _uniqueTestNames = [];
       _selectedGender = 'All';
       _selectedRegion = 'All';
-      _selectedPhase = 'All';
-      _selectedFibrosis = 'All';
       _selectedYear = 'All';
       _searchQuery = '';
       _errorMessage = null;
@@ -114,15 +111,19 @@ class AnalysisProvider extends ChangeNotifier {
     final regions = _allPatients.map((p) => p.region).toSet().toList()..sort();
     _availableRegions = ['All', ...regions];
 
-    // Collect unique years from test histories
+    // Collect unique years & unique tests
     final yearsSet = <int>{};
+    final testsSet = <String>{};
     for (var p in _allPatients) {
-      for (var testHistory in p.testHistory.values) {
-        yearsSet.addAll(testHistory.keys);
+      for (var entry in p.testHistory.entries) {
+        testsSet.add(entry.key);
+        yearsSet.addAll(entry.value.keys);
       }
     }
     final years = yearsSet.map((y) => y.toString()).toList()..sort();
     _availableYears = ['All', ...years];
+
+    _uniqueTestNames = testsSet.toList()..sort();
   }
 
   // Parse Excel Bytes
@@ -135,10 +136,7 @@ class AnalysisProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Decode Excel sheet using excel package
       final Excel excel = Excel.decodeBytes(bytes);
-      
-      // Get the first table/sheet
       final String sheetName = excel.tables.keys.first;
       final Sheet sheet = excel.tables[sheetName]!;
       
@@ -147,8 +145,6 @@ class AnalysisProvider extends ChangeNotifier {
         throw Exception('The uploaded sheet is empty or contains only headers.');
       }
 
-      // Check for headers.
-      // Expected columns: gender, dateofbirth, region_en, test_name, result_year, result_value
       final firstRow = sheet.rows.first;
       bool hasHeader = false;
       if (firstRow.isNotEmpty) {
@@ -160,9 +156,6 @@ class AnalysisProvider extends ChangeNotifier {
 
       final startRow = hasHeader ? 1 : 0;
       final int totalRowsToProcess = maxRows - startRow;
-      
-      // Patient aggregator: Map key -> Patient
-      // Key format: "gender_dob_region"
       final Map<String, Patient> tempPatientMap = {};
 
       int processedRowsCount = 0;
@@ -171,7 +164,6 @@ class AnalysisProvider extends ChangeNotifier {
         final row = sheet.rows[i];
         if (row.isEmpty || row.length < 6) continue;
 
-        // Extract values
         final gender = row[0]?.value?.toString().trim() ?? 'Unknown';
         final dob = row[1]?.value?.toString().trim() ?? 'Unknown';
         final region = row[2]?.value?.toString().trim() ?? 'Unknown';
@@ -182,11 +174,8 @@ class AnalysisProvider extends ChangeNotifier {
         if (testName.isEmpty || resultValue == null) continue;
 
         final resultYear = int.tryParse(resultYearStr) ?? 2025;
-
-        // Group key
         final key = '${gender}_${dob}_$region'.toLowerCase();
 
-        // Retrieve or create patient
         Patient patient;
         if (tempPatientMap.containsKey(key)) {
           patient = tempPatientMap[key]!;
@@ -200,7 +189,6 @@ class AnalysisProvider extends ChangeNotifier {
           tempPatientMap[key] = patient;
         }
 
-        // Add test result to patient's test history
         if (!patient.testHistory.containsKey(testName)) {
           patient.testHistory[testName] = {};
         }
@@ -208,7 +196,6 @@ class AnalysisProvider extends ChangeNotifier {
 
         processedRowsCount++;
 
-        // Yield to event loop every 2000 rows to keep web browser responsive and update progress
         if (processedRowsCount % 2000 == 0) {
           _parseProgress = processedRowsCount / totalRowsToProcess;
           notifyListeners();
@@ -216,11 +203,9 @@ class AnalysisProvider extends ChangeNotifier {
         }
       }
 
-      // Convert map to list of patients
       _allPatients = tempPatientMap.values.toList();
       _updateFiltersList();
 
-      // Save to Hive cache Box
       final List<Map<String, dynamic>> jsonList = _allPatients.map((p) => p.toJson()).toList();
       await _cacheBox.put('patients_list', jsonList);
       await _cacheBox.put('file_name', name);
@@ -247,16 +232,6 @@ class AnalysisProvider extends ChangeNotifier {
     _applyFilters();
   }
 
-  void setPhaseFilter(String val) {
-    _selectedPhase = val;
-    _applyFilters();
-  }
-
-  void setFibrosisFilter(String val) {
-    _selectedFibrosis = val;
-    _applyFilters();
-  }
-
   void setYearFilter(String val) {
     _selectedYear = val;
     _applyFilters();
@@ -270,25 +245,21 @@ class AnalysisProvider extends ChangeNotifier {
   // Apply filters
   void _applyFilters() {
     _filteredPatients = _allPatients.where((patient) {
-      // 1. Gender Filter
       if (_selectedGender != 'All' &&
           patient.gender.toLowerCase() != _selectedGender.toLowerCase()) {
         return false;
       }
 
-      // 2. Region Filter
       if (_selectedRegion != 'All' &&
           patient.region.toLowerCase() != _selectedRegion.toLowerCase()) {
         return false;
       }
 
-      // 3. Year Filter
       int? targetYear;
       if (_selectedYear != 'All') {
         targetYear = int.tryParse(_selectedYear);
         if (targetYear == null) return false;
 
-        // Check if patient has any test in this year
         bool hasTestInYear = false;
         for (var history in patient.testHistory.values) {
           if (history.containsKey(targetYear)) {
@@ -299,23 +270,6 @@ class AnalysisProvider extends ChangeNotifier {
         if (!hasTestInYear) return false;
       }
 
-      // 4. Disease Phase Filter
-      if (_selectedPhase != 'All') {
-        final phase = patient.getDiseasePhase(targetYear);
-        if (phase.toString().split('.').last != _selectedPhase) {
-          return false;
-        }
-      }
-
-      // 5. Fibrosis Risk Filter
-      if (_selectedFibrosis != 'All') {
-        final risk = patient.getFibrosisRisk(targetYear);
-        if (risk.toString().split('.').last != _selectedFibrosis) {
-          return false;
-        }
-      }
-
-      // 6. Search Query (Matches region, gender, dob, or region_en)
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         final matchesRegion = patient.region.toLowerCase().contains(q);
@@ -330,49 +284,15 @@ class AnalysisProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Analytics Aggregates (filtered)
+  // Stats Card Info
   int get totalPatientsCount => _filteredPatients.length;
+  int get totalUniqueTestsCount => _uniqueTestNames.length;
+  int get totalRegionsCount => _availableRegions.length - 1; // Subtract 'All'
 
   int get malesCount => _filteredPatients.where((p) => p.gender.toLowerCase() == 'male' || p.gender.toLowerCase() == 'm').length;
   int get femalesCount => _filteredPatients.where((p) => p.gender.toLowerCase() == 'female' || p.gender.toLowerCase() == 'f').length;
 
-  Map<HepBPhase, int> get phaseDistribution {
-    final Map<HepBPhase, int> dist = {
-      HepBPhase.immuneTolerant: 0,
-      HepBPhase.activeHBeAgPositive: 0,
-      HepBPhase.inactiveCarrier: 0,
-      HepBPhase.activeHBeAgNegative: 0,
-      HepBPhase.resolved: 0,
-      HepBPhase.vaccinated: 0,
-      HepBPhase.susceptible: 0,
-      HepBPhase.indeterminate: 0,
-    };
-    int? targetYear = _selectedYear != 'All' ? int.tryParse(_selectedYear) : null;
-
-    for (var p in _filteredPatients) {
-      final phase = p.getDiseasePhase(targetYear);
-      dist[phase] = (dist[phase] ?? 0) + 1;
-    }
-    return dist;
-  }
-
-  Map<FibrosisRiskLevel, int> get fibrosisDistribution {
-    final Map<FibrosisRiskLevel, int> dist = {
-      FibrosisRiskLevel.low: 0,
-      FibrosisRiskLevel.indeterminate: 0,
-      FibrosisRiskLevel.high: 0,
-      FibrosisRiskLevel.unknown: 0,
-    };
-    int? targetYear = _selectedYear != 'All' ? int.tryParse(_selectedYear) : null;
-
-    for (var p in _filteredPatients) {
-      final risk = p.getFibrosisRisk(targetYear);
-      dist[risk] = (dist[risk] ?? 0) + 1;
-    }
-    return dist;
-  }
-
-  // Region Patient Counts (used for Saudi map)
+  // Region Patient Counts (used for Saudi map outline)
   Map<String, int> get regionCounts {
     final Map<String, int> counts = {};
     for (var p in _filteredPatients) {
@@ -382,33 +302,138 @@ class AnalysisProvider extends ChangeNotifier {
     return counts;
   }
 
-  // Get average ALT / AST / Platelets
-  double get averageAlt {
-    int? targetYear = _selectedYear != 'All' ? int.tryParse(_selectedYear) : null;
-    final list = _filteredPatients.map((p) => p.getAlt(targetYear)).whereType<double>().toList();
-    if (list.isEmpty) return 0.0;
-    return double.parse((list.reduce((a, b) => a + b) / list.length).toStringAsFixed(1));
+  // Region analysis details (table representation)
+  List<Map<String, dynamic>> get regionAnalysisTable {
+    final Map<String, int> counts = regionCounts;
+    final int total = totalPatientsCount;
+
+    final List<Map<String, dynamic>> table = [];
+
+    Patient.saudiRegionPopulations.forEach((regionName, population) {
+      // Find matches in counts (accounting for variations)
+      int count = 0;
+      counts.forEach((key, val) {
+        if (_isRegionMatch(key, regionName)) {
+          count += val;
+        }
+      });
+
+      final double prevalence = population > 0 ? (count / population) * 100 : 0.0;
+      final double cohortShare = total > 0 ? (count / total) * 100 : 0.0;
+
+      table.add({
+        'region': regionName,
+        'population': population,
+        'patients': count,
+        'prevalence': double.parse(prevalence.toStringAsFixed(5)), // Prevalence is usually small
+        'cohortShare': double.parse(cohortShare.toStringAsFixed(2)),
+      });
+    });
+
+    // Sort table by patient count descending
+    table.sort((a, b) => (b['patients'] as int).compareTo(a['patients'] as int));
+    return table;
   }
 
-  double get averageAst {
-    int? targetYear = _selectedYear != 'All' ? int.tryParse(_selectedYear) : null;
-    final list = _filteredPatients.map((p) => p.getAst(targetYear)).whereType<double>().toList();
-    if (list.isEmpty) return 0.0;
-    return double.parse((list.reduce((a, b) => a + b) / list.length).toStringAsFixed(1));
+  bool _isRegionMatch(String input, String target) {
+    final cleanInput = input.toLowerCase().trim();
+    final cleanTarget = target.toLowerCase().trim();
+
+    if (cleanInput == cleanTarget) return true;
+    if (cleanTarget.contains('eastern') && (cleanInput.contains('eastern') || cleanInput.contains('الشرقية') || cleanInput.contains('dammam'))) return true;
+    if (cleanTarget.contains('riyadh') && (cleanInput.contains('riyadh') || cleanInput.contains('الرياض') || cleanInput.contains('riyad'))) return true;
+    if (cleanTarget.contains('makkah') && (cleanInput.contains('makkah') || cleanInput.contains('mecca') || cleanInput.contains('مكة'))) return true;
+    if (cleanTarget.contains('madinah') && (cleanInput.contains('madinah') || cleanInput.contains('madina') || cleanInput.contains('المدينة'))) return true;
+    if (cleanTarget.contains('qassim') && (cleanInput.contains('qassim') || cleanInput.contains('القصيم') || cleanInput.contains('gassim'))) return true;
+    if (cleanTarget.contains('hail') && (cleanInput.contains('hail') || cleanInput.contains('حائل'))) return true;
+    if (cleanTarget.contains('tabuk') && (cleanInput.contains('tabuk') || cleanInput.contains('تبوك'))) return true;
+    if (cleanTarget.contains('jawf') && (cleanInput.contains('jawf') || cleanInput.contains('الجوف'))) return true;
+    if (cleanTarget.contains('borders') && (cleanInput.contains('border') || cleanInput.contains('شمالية') || cleanInput.contains('arar'))) return true;
+    if (cleanTarget.contains('jazan') && (cleanInput.contains('jazan') || cleanInput.contains('jizan') || cleanInput.contains('جازان'))) return true;
+    if (cleanTarget.contains('asir') && (cleanInput.contains('asir') || cleanInput.contains('عسير') || cleanInput.contains('abha'))) return true;
+    if (cleanTarget.contains('najran') && (cleanInput.contains('najran') || cleanInput.contains('نجران'))) return true;
+    if (cleanTarget.contains('bahah') && (cleanInput.contains('bahah') || cleanInput.contains('الباحة'))) return true;
+
+    return false;
   }
 
-  double get averagePlatelets {
-    int? targetYear = _selectedYear != 'All' ? int.tryParse(_selectedYear) : null;
-    final list = _filteredPatients.map((p) => p.getPlatelets(targetYear)).whereType<double>().toList();
-    if (list.isEmpty) return 0.0;
-    return double.parse((list.reduce((a, b) => a + b) / list.length).toStringAsFixed(1));
+  // Dynamic test breakdown
+  Map<String, int> getTestResultBreakdown(String testName, [int? targetYear]) {
+    final Map<String, int> breakdown = {};
+    final String targetTest = testName.toUpperCase().trim();
+
+    for (var p in _filteredPatients) {
+      final val = p.getLatestValue(targetTest, targetYear);
+      if (val == null) continue;
+
+      // Classify based on clinical test type
+      if (targetTest == 'ALT' || targetTest == 'AST') {
+        final numVal = p.getNumericValue(targetTest, targetYear);
+        if (numVal != null) {
+          final label = numVal <= 40 ? 'Normal (<= 40 U/L)' : 'Elevated (> 40 U/L)';
+          breakdown[label] = (breakdown[label] ?? 0) + 1;
+        }
+      } else if (targetTest == 'PLATELETS' || targetTest == 'PLT') {
+        final numVal = p.getNumericValue(targetTest, targetYear);
+        if (numVal != null) {
+          // Adjust for platelet units (normal range >= 150)
+          double limit = 150;
+          if (numVal > 1000) {
+            limit = 150000;
+          }
+          final label = numVal >= limit ? 'Normal (>= 150)' : 'Low (< 150)';
+          breakdown[label] = (breakdown[label] ?? 0) + 1;
+        }
+      } else if (targetTest == 'HBV DNA' || targetTest == 'HBV_DNA' || targetTest == 'VIRAL LOAD' || targetTest == 'PCR') {
+        final numVal = p.getNumericValue(targetTest, targetYear);
+        if (numVal != null) {
+          String label;
+          if (numVal < 10) {
+            label = 'Undetectable (< 10 IU/mL)';
+          } else if (numVal < 2000) {
+            label = 'Low (< 2,000 IU/mL)';
+          } else if (numVal <= 20000) {
+            label = 'Moderate (2,000 - 20,000)';
+          } else {
+            label = 'High (> 20,000 IU/mL)';
+          }
+          breakdown[label] = (breakdown[label] ?? 0) + 1;
+        }
+      } else {
+        // Qualitative / Generic test (like HBsAg, HBeAg or others)
+        String label = val.toString().toLowerCase().trim();
+        // Capitalize for cleaner UI
+        if (label == 'positive' || label == 'reactive' || label == 'موجب') {
+          label = 'Positive / Reactive';
+        } else if (label == 'negative' || label == 'non-reactive' || label == 'سالب') {
+          label = 'Negative / Non-reactive';
+        } else {
+          label = label.toUpperCase();
+        }
+        breakdown[label] = (breakdown[label] ?? 0) + 1;
+      }
+    }
+
+    return breakdown;
   }
 
-  // Average FIB-4
-  double get averageFib4 {
-    int? targetYear = _selectedYear != 'All' ? int.tryParse(_selectedYear) : null;
-    final list = _filteredPatients.map((p) => p.getFib4(targetYear)).whereType<double>().toList();
-    if (list.isEmpty) return 0.0;
-    return double.parse((list.reduce((a, b) => a + b) / list.length).toStringAsFixed(2));
+  // Get numerical statistics for test card (Min, Max, Mean)
+  Map<String, double> getTestNumericalStats(String testName, [int? targetYear]) {
+    final list = _filteredPatients
+        .map((p) => p.getNumericValue(testName, targetYear))
+        .whereType<double>()
+        .toList();
+
+    if (list.isEmpty) return {};
+
+    final minVal = list.reduce((a, b) => a < b ? a : b);
+    final maxVal = list.reduce((a, b) => a > b ? a : b);
+    final meanVal = list.reduce((a, b) => a + b) / list.length;
+
+    return {
+      'min': double.parse(minVal.toStringAsFixed(1)),
+      'max': double.parse(maxVal.toStringAsFixed(1)),
+      'mean': double.parse(meanVal.toStringAsFixed(1)),
+    };
   }
 }

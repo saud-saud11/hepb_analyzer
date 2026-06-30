@@ -12,7 +12,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final VoidCallback toggleTheme;
   final ThemeMode themeMode;
 
@@ -22,19 +22,31 @@ class DashboardScreen extends StatelessWidget {
     required this.themeMode,
   });
 
-  // Export current summary statistics to a printable PDF document
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  String? _selectedTest;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = Provider.of<AnalysisProvider>(context, listen: false);
+    if (provider.uniqueTestNames.isNotEmpty && _selectedTest == null) {
+      // Default select the first test (e.g. ALT or HBsAg)
+      _selectedTest = provider.uniqueTestNames.first;
+    }
+  }
+
+  // Export current region and test statistics to a printable PDF
   Future<void> _exportPdfReport(BuildContext context, AnalysisProvider provider) async {
     final pdf = pw.Document();
     
     final int total = provider.totalPatientsCount;
-    final int males = provider.malesCount;
-    final int females = provider.femalesCount;
-    final double avgAlt = provider.averageAlt;
-    final double avgAst = provider.averageAst;
-    final double avgFib4 = provider.averageFib4;
-
-    final phaseDist = provider.phaseDistribution;
-    final fibrosisDist = provider.fibrosisDistribution;
+    final int uniqueTests = provider.totalUniqueTestsCount;
+    final int regionsCount = provider.totalRegionsCount;
+    final List<Map<String, dynamic>> regionsTable = provider.regionAnalysisTable;
 
     pdf.addPage(
       pw.Page(
@@ -48,43 +60,50 @@ class DashboardScreen extends StatelessWidget {
                 pw.Header(
                   level: 0,
                   child: pw.Text(
-                    'Hepatitis B Patient Registry Staging Report',
-                    style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+                    'Hepatitis B Patient Registry Analysis Report',
+                    style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
                   ),
                 ),
-                pw.SizedBox(height: 16),
+                pw.SizedBox(height: 12),
                 pw.Text('Generated on: ${DateTime.now().toString().split('.').first}'),
                 pw.Text('Source File: ${provider.fileName ?? "Local Database Cache"}'),
                 pw.Divider(),
                 
-                pw.SizedBox(height: 20),
-                pw.Text('1. Executive Clinical Summary', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 10),
-                pw.Bullet(text: 'Total Active Patients: $total'),
-                pw.Bullet(text: 'Gender Distribution: Males: $males, Females: $females'),
-                pw.Bullet(text: 'Mean ALT Level: $avgAlt U/L'),
-                pw.Bullet(text: 'Mean AST Level: $avgAst U/L'),
-                pw.Bullet(text: 'Mean FIB-4 Score: $avgFib4 points'),
+                pw.SizedBox(height: 16),
+                pw.Text('1. Cohort Overview', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.Bullet(text: 'Total Registry Patients: $total'),
+                pw.Bullet(text: 'Unique Clinical Tests: $uniqueTests'),
+                pw.Bullet(text: 'Saudi Regions Represented: $regionsCount'),
 
                 pw.SizedBox(height: 20),
-                pw.Text('2. EASL Disease Phase Distribution', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                pw.Text('2. Region Prevalence & Distribution', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 10),
-                ...phaseDist.entries.map((entry) => 
-                  pw.Text('• ${entry.key.nameEn}: ${entry.value} patients')
-                ),
-
-                pw.SizedBox(height: 20),
-                pw.Text('3. Liver Fibrosis Risk Classification (FIB-4)', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 10),
-                ...fibrosisDist.entries.map((entry) => 
-                  pw.Text('• ${entry.key.nameEn}: ${entry.value} patients')
+                
+                // Simplified Region Table for PDF
+                pw.TableHelper.fromTextArray(
+                  headers: ['Region', 'Population', 'Excel Patients', 'Prevalence', 'Cohort Share'],
+                  data: regionsTable.map((row) {
+                    final prevVal = row['prevalence'] as double;
+                    final prevPer100k = prevVal * 1000; // cases per 100k
+                    return [
+                      row['region'].toString(),
+                      row['population'].toString(),
+                      row['patients'].toString(),
+                      '${prevVal.toStringAsFixed(5)}% (${prevPer100k.toStringAsFixed(1)}/100k)',
+                      '${row['cohortShare']}%',
+                    ];
+                  }).toList(),
+                  border: pw.TableBorder.all(color: PdfColors.grey300),
+                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  cellAlignment: pw.Alignment.centerLeft,
                 ),
                 
-                pw.SizedBox(height: 40),
+                pw.SizedBox(height: 30),
                 pw.Divider(),
                 pw.Align(
                   alignment: pw.Alignment.center,
-                  child: pw.Text('Confidential - Medical Research Use Only', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+                  child: pw.Text('Confidential - Medical Research Registry Use Only', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey)),
                 ),
               ],
             ),
@@ -95,7 +114,7 @@ class DashboardScreen extends StatelessWidget {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'hepb_registry_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      name: 'hepb_prevalence_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
   }
 
@@ -105,7 +124,7 @@ class DashboardScreen extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => FractionallySizedBox(
-        heightFactor: 0.85,
+        heightFactor: 0.70,
         child: PatientDetailSheet(patient: patient, selectedYear: year),
       ),
     );
@@ -115,26 +134,27 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<AnalysisProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final int? activeYear = provider.selectedYear != 'All' ? int.tryParse(provider.selectedYear) : null;
 
-    // Calculate active hepatitis cases count (Phase 2 & Phase 4)
-    final activeHepCount = provider.allPatients.where((p) {
-      final phase = p.getDiseasePhase(activeYear);
-      return phase == HepBPhase.activeHBeAgPositive || phase == HepBPhase.activeHBeAgNegative;
-    }).length;
+    if (provider.uniqueTestNames.isNotEmpty && _selectedTest == null) {
+      _selectedTest = provider.uniqueTestNames.first;
+    }
 
-    // Calculate high fibrosis risk count
-    final highFibrosisCount = provider.allPatients.where((p) {
-      return p.getFibrosisRisk(activeYear) == FibrosisRiskLevel.high;
-    }).length;
+    // Get active test breakdown and stats
+    final breakdown = _selectedTest != null 
+        ? provider.getTestResultBreakdown(_selectedTest!, activeYear) 
+        : <String, int>{};
+        
+    final stats = _selectedTest != null 
+        ? provider.getTestNumericalStats(_selectedTest!, activeYear) 
+        : <String, double>{};
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Hepatitis B Dashboard'),
+            const Text('Hepatitis B Registry Dashboard'),
             if (provider.fileName != null)
               Text(
                 'Source: ${provider.fileName}',
@@ -162,6 +182,9 @@ class DashboardScreen extends StatelessWidget {
                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerRed),
                       onPressed: () {
                         provider.clearCache();
+                        setState(() {
+                          _selectedTest = null;
+                        });
                         Navigator.pop(context);
                       },
                       child: const Text('Clear', style: TextStyle(color: Colors.white)),
@@ -179,8 +202,8 @@ class DashboardScreen extends StatelessWidget {
           ),
           // Toggle Theme
           IconButton(
-            icon: Icon(themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
-            onPressed: toggleTheme,
+            icon: Icon(widget.themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
+            onPressed: widget.toggleTheme,
             tooltip: 'Toggle Theme',
           ),
         ],
@@ -188,7 +211,7 @@ class DashboardScreen extends StatelessWidget {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Left Sidebar - Filters & SA Map (Scrollable)
+          // Left Area - Interactive Map & Region analysis (Scrollable)
           Expanded(
             flex: 6,
             child: SingleChildScrollView(
@@ -206,7 +229,7 @@ class DashboardScreen extends StatelessWidget {
                         children: [
                           _buildStatCard(
                             context,
-                            title: 'Total Registry Patients',
+                            title: 'Registry Patients',
                             value: provider.totalPatientsCount.toString(),
                             subtitle: '${provider.malesCount} Males • ${provider.femalesCount} Females',
                             icon: Icons.people_outline,
@@ -215,19 +238,19 @@ class DashboardScreen extends StatelessWidget {
                           ),
                           _buildStatCard(
                             context,
-                            title: 'Active Hepatitis Cases',
-                            value: activeHepCount.toString(),
-                            subtitle: 'Eligible for Antivirals',
-                            icon: Icons.healing_outlined,
-                            color: AppColors.dangerRed,
+                            title: 'Unique Tests Tracked',
+                            value: provider.totalUniqueTestsCount.toString(),
+                            subtitle: 'Clinical Markers in Excel',
+                            icon: Icons.biotech_outlined,
+                            color: AppColors.accentIndigo,
                             width: cardWidth,
                           ),
                           _buildStatCard(
                             context,
-                            title: 'High Fibrosis Risk',
-                            value: highFibrosisCount.toString(),
-                            subtitle: 'FIB-4 Score > 3.25',
-                            icon: Icons.warning_amber_outlined,
+                            title: 'Regions Represented',
+                            value: provider.totalRegionsCount.toString(),
+                            subtitle: 'Out of 13 Saudi Regions',
+                            icon: Icons.map_outlined,
                             color: AppColors.warningAmber,
                             width: cardWidth,
                           ),
@@ -237,7 +260,7 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // 2. Main Analytics Panel (Saudi Map + Charts)
+                  // 2. Map & Region Table
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -262,7 +285,7 @@ class DashboardScreen extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 4),
                                         const Text(
-                                          'خريطة توزيع الحالات حسب مناطق المملكة',
+                                          'خريطة توزيع الحالات حسب مناطق المملكة وعرض الرقم',
                                           style: TextStyle(fontSize: 12, color: Colors.grey),
                                         ),
                                       ],
@@ -288,7 +311,7 @@ class DashboardScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 20),
 
-                      // Phase Pie Chart
+                      // Test Breakdown Chart
                       Expanded(
                         flex: 9,
                         child: Card(
@@ -298,11 +321,76 @@ class DashboardScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'EASL Clinical Phase Distribution',
+                                  'Test & Result Breakdown',
                                   style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
                                 ),
-                                const Divider(height: 24),
-                                PhasePieChart(phaseDistribution: provider.phaseDistribution),
+                                const Divider(height: 12),
+                                // Test Selector Dropdown
+                                if (provider.uniqueTestNames.isNotEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? AppColors.darkCard : Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                                      ),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _selectedTest,
+                                        isExpanded: true,
+                                        hint: const Text('Select Clinical Test'),
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _selectedTest = val;
+                                          });
+                                        },
+                                        items: provider.uniqueTestNames.map((test) {
+                                          return DropdownMenuItem<String>(
+                                            value: test,
+                                            child: Text(test, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Stats display card if it has numeric values
+                                  if (stats.isNotEmpty) ...[
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: (isDark ? AppColors.primaryTeal : AppColors.primaryTealLight).withOpacity(0.05),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: (isDark ? AppColors.primaryTeal : AppColors.primaryTealLight).withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                        children: [
+                                          _buildMiniStats('Mean', stats['mean'].toString()),
+                                          _buildMiniStats('Min', stats['min'].toString()),
+                                          _buildMiniStats('Max', stats['max'].toString()),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+
+                                  TestBreakdownChart(
+                                    breakdown: breakdown,
+                                    testName: _selectedTest ?? '',
+                                  ),
+                                ] else
+                                  const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(32.0),
+                                      child: Text('No test names found in dataset.'),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -312,56 +400,83 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // 3. Bottom Row (Fibrosis Bar Chart + Bio Markers Averages)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Fibrosis Bar Chart
-                      Expanded(
-                        flex: 11,
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Liver Fibrosis Risk Staging (FIB-4)',
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
-                                ),
-                                const Divider(height: 24),
-                                FibrosisBarChart(fibrosisDistribution: provider.fibrosisDistribution),
-                              ],
-                            ),
+                  // 3. Region Analysis Prevalence Table
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Region-wise Analysis & Prevalence',
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'تحليل أعداد السجلات ونسبة الانتشار بناءً على الكثافة السكانية لكل منطقة',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 20),
+                          const Divider(height: 24),
+                          
+                          // Responsive Table
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width * 0.45),
+                              child: DataTable(
+                                horizontalMargin: 8,
+                                columnSpacing: 24,
+                                columns: const [
+                                  DataColumn(label: Text('Region / المنطقة', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Census Population / السكان', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Excel Patients / المرضى', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Prevalence / نسبة الانتشار', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  DataColumn(label: Text('Cohort Share / حصة الفئة', style: TextStyle(fontWeight: FontWeight.bold))),
+                                ],
+                                rows: provider.regionAnalysisTable.map((row) {
+                                  final double prevVal = row['prevalence'] as double;
+                                  final double prevPer100k = prevVal * 1000; // cases per 100k
+                                  final String prevStr = '${prevVal.toStringAsFixed(5)}% (${prevPer100k.toStringAsFixed(1)} per 100k)';
 
-                      // Bio Markers Average Stats
-                      Expanded(
-                        flex: 9,
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Mean Cohort Biomarkers',
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 16),
-                                ),
-                                const Divider(height: 24),
-                                _buildBiomarkerTile(context, 'ALT (SGPT) level', '${provider.averageAlt} U/L', AppColors.primaryTealLight),
-                                _buildBiomarkerTile(context, 'AST (SGOT) level', '${provider.averageAst} U/L', AppColors.accentIndigo),
-                                _buildBiomarkerTile(context, 'Platelets (PLT) count', '${provider.averagePlatelets} x10⁹/L', AppColors.warningAmber),
-                                _buildBiomarkerTile(context, 'Mean FIB-4 Score', '${provider.averageFib4} pts', AppColors.dangerRed),
-                              ],
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(
+                                        Text(
+                                          row['region'].toString(),
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      DataCell(Text(row['population'].toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},'))),
+                                      DataCell(Text(row['patients'].toString())),
+                                      DataCell(
+                                        Text(
+                                          prevStr,
+                                          style: TextStyle(
+                                            color: prevVal > 0 ? AppColors.dangerRed : null,
+                                            fontWeight: prevVal > 0 ? FontWeight.bold : null,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(Text('${row['cohortShare']}%')),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -403,7 +518,7 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
 
-                  // Quick Filter Chips Row (Year)
+                  // Quick Filter Chips Row (Year & Gender)
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -428,28 +543,17 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   const Divider(height: 24),
 
-                  // Virtualized list of patients (Supports 50k+ smoothly!)
+                  // Virtualized list of patients
                   Expanded(
                     child: provider.patients.isEmpty
                         ? const Center(child: Text('No matching records.'))
                         : ListView.builder(
                             itemCount: provider.patients.length,
-                            itemExtent: 72, // Fixed height for speed optimization
+                            itemExtent: 64, // Fixed height for speed
                             itemBuilder: (context, idx) {
                               final p = provider.patients[idx];
                               final pYear = activeYear ?? p.getLatestYear();
                               final pAge = p.getAgeInYear(pYear);
-                              final pPhase = p.getDiseasePhase(pYear);
-                              final pRisk = p.getFibrosisRisk(pYear);
-                              
-                              Color riskDotColor = AppColors.successGreen;
-                              if (pRisk == FibrosisRiskLevel.high) {
-                                riskDotColor = AppColors.dangerRed;
-                              } else if (pRisk == FibrosisRiskLevel.indeterminate) {
-                                riskDotColor = AppColors.warningAmber;
-                              } else if (pRisk == FibrosisRiskLevel.unknown) {
-                                riskDotColor = Colors.grey;
-                              }
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8),
@@ -467,14 +571,12 @@ class DashboardScreen extends StatelessWidget {
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     child: Row(
                                       children: [
-                                        // Risk indicator dot
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: BoxDecoration(
-                                            color: riskDotColor,
-                                            shape: BoxShape.circle,
-                                          ),
+                                        Icon(
+                                          p.gender.toLowerCase() == 'male' || p.gender.toLowerCase() == 'm' 
+                                              ? Icons.male 
+                                              : Icons.female,
+                                          color: isDark ? AppColors.primaryTealLight : AppColors.primaryTeal,
+                                          size: 20,
                                         ),
                                         const SizedBox(width: 12),
                                         // Details
@@ -500,18 +602,6 @@ class DashboardScreen extends StatelessWidget {
                                             ],
                                           ),
                                         ),
-                                        // Stage abbreviation / indicator badge
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? Colors.grey[800] : Colors.grey[200],
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            _getPhaseAbbreviation(pPhase),
-                                            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
-                                          ),
-                                        ),
                                         const Icon(Icons.chevron_right, size: 16),
                                       ],
                                     ),
@@ -530,25 +620,14 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  String _getPhaseAbbreviation(HepBPhase phase) {
-    switch (phase) {
-      case HepBPhase.immuneTolerant:
-        return 'Tolerant';
-      case HepBPhase.activeHBeAgPositive:
-        return 'Act. HBe+';
-      case HepBPhase.inactiveCarrier:
-        return 'Carrier';
-      case HepBPhase.activeHBeAgNegative:
-        return 'Act. HBe-';
-      case HepBPhase.resolved:
-        return 'Resolved';
-      case HepBPhase.vaccinated:
-        return 'Immune';
-      case HepBPhase.susceptible:
-        return 'Suscept.';
-      case HepBPhase.indeterminate:
-        return 'Indeterm.';
-    }
+  Widget _buildMiniStats(String label, String value) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      ],
+    );
   }
 
   Widget _buildStatCard(
@@ -606,32 +685,6 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBiomarkerTile(BuildContext context, String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 10),
-              Text(label, style: const TextStyle(fontSize: 13)),
-            ],
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ],
       ),
