@@ -634,7 +634,42 @@ class AnalysisProvider extends ChangeNotifier {
       if (val == null) continue;
 
       // Classify based on clinical test type
-      if (targetTest == 'ALT' || targetTest == 'AST') {
+      if (targetTest.contains('HEPATITIS B VIRUS SURFACE AB') ||
+          targetTest.contains('HBSAB') ||
+          targetTest.contains('ANTI-HBS') ||
+          targetTest.contains('ANTI - HBS') ||
+          targetTest.contains('SURFACE AB')) {
+        final parsed = Patient.parseValueAndUnit(val);
+        final double? dVal = parsed['value'];
+        final String? unit = parsed['unit'];
+
+        if (dVal != null) {
+          // Normalize unit text: strip whitespace and lowercase
+          final normUnit = (unit ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), '');
+          bool isImmune = false;
+
+          // 10 mIU/mL equals 10000 mIU/L (since 1 mL = 0.001 L)
+          if (normUnit == 'm[iu]/l' || normUnit == 'miu/l') {
+            isImmune = dVal >= 10000;
+          } else if (normUnit == 'miu/ml' || normUnit == 'iu/l') {
+            isImmune = dVal >= 10;
+          } else {
+            // Default fallback
+            isImmune = dVal >= 10;
+          }
+
+          final label = isImmune ? 'Positive / Reactive / Immune' : 'Negative / Non-reactive / Not immune';
+          breakdown[label] = (breakdown[label] ?? 0) + 1;
+        } else {
+          // Qualitative text fallback
+          final strVal = val.toString().toLowerCase().trim();
+          if (strVal == 'positive' || strVal == 'reactive' || strVal == 'immune' || strVal.contains('immune') || strVal.contains('reactive')) {
+            breakdown['Positive / Reactive / Immune'] = (breakdown['Positive / Reactive / Immune'] ?? 0) + 1;
+          } else {
+            breakdown['Negative / Non-reactive / Not immune'] = (breakdown['Negative / Non-reactive / Not immune'] ?? 0) + 1;
+          }
+        }
+      } else if (targetTest == 'ALT' || targetTest == 'AST') {
         final numVal = p.getNumericValue(targetTest, targetYear);
         if (numVal != null) {
           final label = numVal <= 40 ? 'Normal (<= 40 U/L)' : 'Elevated (> 40 U/L)';

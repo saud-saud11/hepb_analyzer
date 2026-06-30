@@ -117,10 +117,61 @@ class Patient {
     return null;
   }
 
+  static Map<String, dynamic> parseValueAndUnit(dynamic rawVal) {
+    if (rawVal == null) return {'value': null, 'unit': null};
+    if (rawVal is num) {
+      return {'value': rawVal.toDouble(), 'unit': null};
+    }
+    final str = rawVal.toString().trim();
+    
+    // Regex to match number and subsequent text (unit)
+    // Matches e.g. "423 m[IU]/L" -> Group 1: "423", Group 2: "m[IU]/L"
+    final regExp = RegExp(r'^([0-9\.\-]+)\s*(.*)$');
+    final match = regExp.firstMatch(str);
+    if (match != null) {
+      final numStr = match.group(1);
+      final unitStr = match.group(2)?.trim();
+      final dVal = double.tryParse(numStr ?? '');
+      return {
+        'value': dVal,
+        'unit': unitStr?.isNotEmpty == true ? unitStr : null,
+      };
+    }
+    return {'value': null, 'unit': null};
+  }
+
   bool? getBooleanValue(String testName, [int? targetYear]) {
     final val = getLatestValue(testName, targetYear);
     if (val == null) return null;
     if (val is bool) return val;
+
+    final cleanTest = testName.toUpperCase().trim();
+    // Check if the test represents Anti-HBs / HBsAb (e.g. surface antibody test)
+    if (cleanTest.contains('HEPATITIS B VIRUS SURFACE AB') ||
+        cleanTest.contains('HBSAB') ||
+        cleanTest.contains('ANTI-HBS') ||
+        cleanTest.contains('ANTI - HBS') ||
+        cleanTest.contains('SURFACE AB')) {
+      final parsed = parseValueAndUnit(val);
+      final double? dVal = parsed['value'];
+      final String? unit = parsed['unit'];
+
+      if (dVal != null) {
+        // Normalize unit text: lowercase and strip spaces
+        final normUnit = (unit ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), '');
+        
+        // 10 mIU/mL equals 10000 mIU/L (since 1 mL = 0.001 L)
+        if (normUnit == 'm[iu]/l' || normUnit == 'miu/l') {
+          return dVal >= 10000;
+        } else if (normUnit == 'miu/ml' || normUnit == 'iu/l') {
+          return dVal >= 10;
+        } else {
+          // Default fallback (assume mIU/mL if not specified)
+          return dVal >= 10;
+        }
+      }
+    }
+
     final strVal = val.toString().toLowerCase().trim();
     if (strVal == 'positive' ||
         strVal == 'reactive' ||
@@ -128,7 +179,8 @@ class Patient {
         strVal == 'yes' ||
         strVal == '1' ||
         strVal == 'pos' ||
-        strVal == 'موجب') {
+        strVal == 'موجب' ||
+        strVal.contains('immune')) {
       return true;
     }
     if (strVal == 'negative' ||
@@ -137,7 +189,8 @@ class Patient {
         strVal == 'no' ||
         strVal == '0' ||
         strVal == 'neg' ||
-        strVal == 'سالب') {
+        strVal == 'سالب' ||
+        strVal.contains('not immune')) {
       return false;
     }
     return null;

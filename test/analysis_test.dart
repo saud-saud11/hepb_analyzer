@@ -112,4 +112,80 @@ void main() {
       expect(provider.allPatients.first.getBooleanValue('HBsAg'), true);
     });
   });
+
+  group('Anti-HBs/HBsAb Clinical Unit-based Interpretation Tests', () {
+    const String testName = "Hepatitis B virus surface Ab [Units/volume] in Serum or Plasma by Immunoassay";
+
+    test('Unit m[IU]/L below 10000 should be Negative/Not immune', () {
+      final patient = Patient(
+        gender: 'Male',
+        dateOfBirth: '1985',
+        region: 'Riyadh',
+        testHistory: {
+          testName.toUpperCase(): {2025: "423 m[IU]/L"}
+        },
+      );
+      expect(patient.getBooleanValue(testName), false);
+    });
+
+    test('Unit m[IU]/L equal or above 10000 should be Positive/Immune', () {
+      final patient = Patient(
+        gender: 'Male',
+        dateOfBirth: '1985',
+        region: 'Riyadh',
+        testHistory: {
+          testName.toUpperCase(): {2025: "12500 m[IU]/L"}
+        },
+      );
+      expect(patient.getBooleanValue(testName), true);
+    });
+
+    test('Unit mIU/mL below 10 should be Negative/Not immune', () {
+      final patient = Patient(
+        gender: 'Male',
+        dateOfBirth: '1985',
+        region: 'Riyadh',
+        testHistory: {
+          testName.toUpperCase(): {2025: "8.5 mIU/mL"}
+        },
+      );
+      expect(patient.getBooleanValue(testName), false);
+    });
+
+    test('Unit mIU/mL equal or above 10 should be Positive/Immune', () {
+      final patient = Patient(
+        gender: 'Male',
+        dateOfBirth: '1985',
+        region: 'Riyadh',
+        testHistory: {
+          testName.toUpperCase(): {2025: "15.4 mIU/mL"}
+        },
+      );
+      expect(patient.getBooleanValue(testName), true);
+    });
+
+    test('Unit IU/L equal or above 10 should be Positive/Immune', () {
+      final patient = Patient(
+        gender: 'Male',
+        dateOfBirth: '1985',
+        region: 'Riyadh',
+        testHistory: {
+          testName.toUpperCase(): {2025: "22.0 IU/L"}
+        },
+      );
+      expect(patient.getBooleanValue(testName), true);
+    });
+
+    test('Unit mIU/L below 10000 should be Negative/Not immune', () {
+      final patient = Patient(
+        gender: 'Male',
+        dateOfBirth: '1985',
+        region: 'Riyadh',
+        testHistory: {
+          testName.toUpperCase(): {2025: "9500 mIU/L"}
+        },
+      );
+      expect(patient.getBooleanValue(testName), false);
+    });
+  });
 }
