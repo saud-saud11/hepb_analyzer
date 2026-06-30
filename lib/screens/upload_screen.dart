@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/analysis_provider.dart';
 import '../utils/theme.dart';
-// Standard web download helper
 import 'package:universal_html/html.dart' as html;
 
 class UploadScreen extends StatelessWidget {
@@ -21,7 +20,7 @@ class UploadScreen extends StatelessWidget {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls'],
+        allowedExtensions: ['xlsx', 'xls', 'csv'],
         withData: true, // Crucial for Web
       );
 
@@ -31,7 +30,7 @@ class UploadScreen extends StatelessWidget {
         
         if (bytes != null) {
           final provider = Provider.of<AnalysisProvider>(context, listen: false);
-          await provider.parseExcelFile(bytes, file.name, file.size);
+          await provider.parseFile(bytes, file.name, file.size);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Failed to read file contents.')),
@@ -133,7 +132,7 @@ class UploadScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Upload your patient registry Excel sheet to dynamically analyze liver fibrosis, calculate FIB-4/APRI scores, and map geographic distributions across Saudi Arabia.',
+                  'Upload your patient registry CSV or Excel sheet to dynamically analyze test results and map geographic distribution across Saudi Arabia.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 15),
                 ),
@@ -200,10 +199,15 @@ class UploadScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Click to select Excel File (.xlsx, .xls)',
+                            'Click to select File (.csv, .xlsx, .xls)',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
+                          const Text(
+                            '(CSV format is recommended for large datasets >10,000 rows)',
+                            style: TextStyle(fontSize: 12, color: AppColors.primaryTealLight, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
                           Text(
                             'Expected Columns: gender, dateofbirth, region_en, test_name, result_year, result_value',
                             textAlign: TextAlign.center,
