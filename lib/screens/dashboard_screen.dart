@@ -130,6 +130,154 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _showDataEntryDialog(BuildContext context, AnalysisProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String gender = 'Male';
+        String region = 'Riyadh';
+        String testSelect = 'ALT';
+        final dobController = TextEditingController(text: '1990');
+        final testNameController = TextEditingController(text: 'ALT');
+        final yearController = TextEditingController(text: DateTime.now().year.toString());
+        final valueController = TextEditingController();
+        bool isCustomTest = false;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Add Patient Test Record / إدخال يدوي'),
+              content: SingleChildScrollView(
+                child: Form(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Gender Dropdown
+                      DropdownButtonFormField<String>(
+                        value: gender,
+                        decoration: const InputDecoration(labelText: 'Gender / الجنس'),
+                        items: const [
+                          DropdownMenuItem(value: 'Male', child: Text('Male')),
+                          DropdownMenuItem(value: 'Female', child: Text('Female')),
+                        ],
+                        onChanged: (val) => setState(() => gender = val ?? 'Male'),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // DOB Input
+                      TextFormField(
+                        controller: dobController,
+                        decoration: const InputDecoration(labelText: 'DOB / سنة الميلاد (e.g. 1985)'),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Region Dropdown
+                      DropdownButtonFormField<String>(
+                        value: region,
+                        decoration: const InputDecoration(labelText: 'Region / المنطقة'),
+                        items: Patient.saudiRegionPopulations.keys.map((reg) {
+                          return DropdownMenuItem(value: reg, child: Text(reg));
+                        }).toList(),
+                        onChanged: (val) => setState(() => region = val ?? 'Riyadh'),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Test Selection Dropdown
+                      DropdownButtonFormField<String>(
+                        value: testSelect,
+                        decoration: const InputDecoration(labelText: 'Test Name / الفحص'),
+                        items: const [
+                          DropdownMenuItem(value: 'ALT', child: Text('ALT')),
+                          DropdownMenuItem(value: 'AST', child: Text('AST')),
+                          DropdownMenuItem(value: 'HBsAg', child: Text('HBsAg')),
+                          DropdownMenuItem(value: 'Platelets', child: Text('Platelets')),
+                          DropdownMenuItem(value: 'HBV DNA', child: Text('HBV DNA')),
+                          DropdownMenuItem(value: 'Other', child: Text('Other (Enter Custom)...')),
+                        ],
+                        onChanged: (val) {
+                          setState(() {
+                            testSelect = val ?? 'ALT';
+                            isCustomTest = testSelect == 'Other';
+                            if (!isCustomTest) {
+                              testNameController.text = testSelect;
+                            } else {
+                              testNameController.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Custom Test Name Input if "Other" selected
+                      if (isCustomTest) ...[
+                        TextFormField(
+                          controller: testNameController,
+                          decoration: const InputDecoration(labelText: 'Enter Test Name / اسم الفحص'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Result Year
+                      TextFormField(
+                        controller: yearController,
+                        decoration: const InputDecoration(labelText: 'Result Year / السنة'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Result Value
+                      TextFormField(
+                        controller: valueController,
+                        decoration: const InputDecoration(labelText: 'Result Value / النتيجة (e.g. 45, positive)'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final dob = dobController.text.trim();
+                    final test = testNameController.text.trim();
+                    final yearStr = yearController.text.trim();
+                    final valStr = valueController.text.trim();
+
+                    if (dob.isEmpty || test.isEmpty || yearStr.isEmpty || valStr.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please fill all fields.')),
+                      );
+                      return;
+                    }
+
+                    final yr = int.tryParse(yearStr) ?? 2025;
+                    provider.addManualRecord(
+                      gender: gender,
+                      dob: dob,
+                      region: region,
+                      testName: test,
+                      year: yr,
+                      value: valStr,
+                    );
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Record added successfully!')),
+                    );
+                  },
+                  child: const Text('Add Record'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AnalysisProvider>();
@@ -163,6 +311,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
+          // Add Record Manually
+          IconButton(
+            icon: const Icon(Icons.add_box_outlined, color: AppColors.primaryTealLight),
+            tooltip: 'Add Record / إدخال يدوي',
+            onPressed: () => _showDataEntryDialog(context, provider),
+          ),
           // Clear Cache
           IconButton(
             icon: const Icon(Icons.delete_outline, color: AppColors.dangerRed),
@@ -388,7 +542,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const Center(
                                     child: Padding(
                                       padding: EdgeInsets.all(32.0),
-                                      child: Text('No test names found in dataset.'),
+                                      child: Text('No test names found in dataset. Use manual entry or upload file to add records.'),
                                     ),
                                   ),
                               ],

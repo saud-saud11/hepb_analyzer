@@ -162,47 +162,100 @@ class AnalysisProvider extends ChangeNotifier {
     }
   }
 
-  // Fast CSV Parser (100x Faster)
+  // Helper: Find the header row index (scanning first 10 rows)
+  int _findHeaderRowIndex(List<List<dynamic>> rows) {
+    for (int i = 0; i < rows.length && i < 10; i++) {
+      final row = rows[i];
+      for (var cell in row) {
+        final cellStr = cell?.toString().toLowerCase() ?? '';
+        if (cellStr.contains('gender') || cellStr.contains('sex') || cellStr.contains('جنس') ||
+            cellStr.contains('test_name') || cellStr.contains('test') || cellStr.contains('region_en')) {
+          return i; // Found header row
+        }
+      }
+    }
+    return 0; // Fallback to first row
+  }
+
+  // Helper: Find indexes mapping keywords to Excel/CSV columns
+  Map<String, int> _findColumnIndexes(List<dynamic> headerRow) {
+    int genderIdx = 0;
+    int dobIdx = 1;
+    int regionIdx = 2;
+    int testNameIdx = 3;
+    int yearIdx = 4;
+    int valueIdx = 5;
+
+    for (int i = 0; i < headerRow.length; i++) {
+      final cell = headerRow[i];
+      final String colName = cell?.toString().toLowerCase().trim() ?? '';
+
+      if (colName.contains('gender') || colName.contains('sex') || colName == 'جنس') {
+        genderIdx = i;
+      } else if (colName.contains('dateofbirth') || colName.contains('dob') || colName.contains('birth') || colName.contains('ميلاد')) {
+        dobIdx = i;
+      } else if (colName.contains('region') || colName.contains('area') || colName.contains('منطقة')) {
+        regionIdx = i;
+      } else if (colName.contains('test_name') || colName.contains('test') || colName.contains('marker') || colName.contains('فحص')) {
+        testNameIdx = i;
+      } else if (colName.contains('result_year') || colName.contains('year') || colName.contains('سنة') || colName.contains('تاريخ الفحص')) {
+        yearIdx = i;
+      } else if (colName.contains('result_value') || colName.contains('value') || colName.contains('result') || colName.contains('نتيجة') || colName.contains('النتيجة')) {
+        valueIdx = i;
+      }
+    }
+
+    return {
+      'gender': genderIdx,
+      'dob': dobIdx,
+      'region': regionIdx,
+      'testName': testNameIdx,
+      'year': yearIdx,
+      'value': valueIdx,
+    };
+  }
+
+  // Fast CSV Parser with Dynamic Columns & Scrambled Header Support
   Future<void> _parseCsvFile(Uint8List bytes) async {
     final String csvText = utf8.decode(bytes);
     final List<String> lines = csvText.split(RegExp(r'\r?\n'));
     if (lines.isEmpty) return;
 
-    // Detect header
-    bool hasHeader = false;
-    final firstLine = lines.first.toLowerCase();
-    if (firstLine.contains('gender') || firstLine.contains('sex')) {
-      hasHeader = true;
+    // Build lists of rows
+    final List<List<String>> rows = [];
+    for (var line in lines) {
+      final cleanLine = line.trim();
+      if (cleanLine.isEmpty) continue;
+      rows.add(cleanLine.split(',').map((cell) => cell.replaceAll('"', '').trim()).toList());
     }
 
-    final startIdx = hasHeader ? 1 : 0;
-    final int totalLinesToProcess = lines.length - startIdx;
+    if (rows.isEmpty) return;
+
+    // Detect header row dynamically
+    final headerRowIdx = _findHeaderRowIndex(rows);
+    final headerRow = rows[headerRowIdx];
+    final colMap = _findColumnIndexes(headerRow);
+
+    final startIdx = headerRowIdx + 1;
+    final int totalLinesToProcess = rows.length - startIdx;
     final Map<String, Patient> tempPatientMap = {};
     int processedLinesCount = 0;
 
-    for (int i = startIdx; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.isEmpty) continue;
+    for (int i = startIdx; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.length <= colMap['value']! || row.length <= colMap['testName']!) continue;
 
-      // Simple CSV row parser handling optional quotes
-      final List<String> row = line.split(',').map((cell) {
-        return cell.replaceAll('"', '').trim();
-      }).toList();
-
-      if (row.length < 6) continue;
-
-      final gender = row[0];
-      final dob = row[1];
-      final region = row[2];
-      final testName = row[3].toUpperCase();
-      final resultYearStr = row[4];
-      final resultValueStr = row[5];
+      final gender = row[colMap['gender']!];
+      final dob = row[colMap['dob']!];
+      final region = row[colMap['region']!];
+      final testName = row[colMap['testName']!].toUpperCase();
+      final resultYearStr = row[colMap['year']!];
+      final resultValueStr = row[colMap['value']!];
 
       if (testName.isEmpty || resultValueStr.isEmpty) continue;
 
       final resultYear = int.tryParse(resultYearStr) ?? 2025;
       
-      // Parse numeric or dynamic value
       dynamic resultValue;
       final numericCheck = double.tryParse(resultValueStr);
       if (numericCheck != null) {
@@ -233,7 +286,6 @@ class AnalysisProvider extends ChangeNotifier {
 
       processedLinesCount++;
 
-      // Yield back to browser microtasks every 5000 lines
       if (processedLinesCount % 5000 == 0) {
         _parseProgress = processedLinesCount / totalLinesToProcess;
         notifyListeners();
@@ -245,7 +297,7 @@ class AnalysisProvider extends ChangeNotifier {
     _updateFiltersList();
   }
 
-  // Optimized Excel Parser with Early Exit on Blank Rows
+  // Optimized Excel Parser with Dynamic Columns & Scrambled Header Support
   Future<void> _parseExcelFile(Uint8List bytes) async {
     final Excel excel = Excel.decodeBytes(bytes);
     final String sheetName = excel.tables.keys.first;
@@ -256,16 +308,18 @@ class AnalysisProvider extends ChangeNotifier {
       throw Exception('The uploaded sheet is empty or contains only headers.');
     }
 
-    final firstRow = sheet.rows.first;
-    bool hasHeader = false;
-    if (firstRow.isNotEmpty) {
-      final cell0 = firstRow[0]?.value?.toString().toLowerCase() ?? '';
-      if (cell0.contains('gender') || cell0.contains('sex')) {
-        hasHeader = true;
-      }
+    // Convert sheet rows list to a list of lists of Cell values for scanner
+    final List<List<dynamic>> rowsList = [];
+    for (var row in sheet.rows) {
+      rowsList.add(row.map((cell) => cell?.value).toList());
     }
 
-    final startRow = hasHeader ? 1 : 0;
+    // Find header dynamically
+    final headerRowIdx = _findHeaderRowIndex(rowsList);
+    final headerRow = sheet.rows[headerRowIdx];
+    final colMap = _findColumnIndexes(headerRow.map((c) => c?.value).toList());
+
+    final startRow = headerRowIdx + 1;
     final int totalRowsToProcess = maxRows - startRow;
     final Map<String, Patient> tempPatientMap = {};
 
@@ -276,10 +330,9 @@ class AnalysisProvider extends ChangeNotifier {
       final row = sheet.rows[i];
       
       // Early exit if we encounter consecutive empty rows
-      if (row.isEmpty || row[0]?.value == null) {
+      if (row.isEmpty || row[colMap['gender']!]?.value == null) {
         consecutiveEmptyRows++;
         if (consecutiveEmptyRows >= 5) {
-          // Break early as we reached the formatted empty zone at the bottom
           break;
         }
         continue;
@@ -287,14 +340,14 @@ class AnalysisProvider extends ChangeNotifier {
       
       consecutiveEmptyRows = 0; // Reset counter on valid row
 
-      if (row.length < 6) continue;
+      if (row.length <= colMap['value']! || row.length <= colMap['testName']!) continue;
 
-      final gender = row[0]?.value?.toString().trim() ?? 'Unknown';
-      final dob = row[1]?.value?.toString().trim() ?? 'Unknown';
-      final region = row[2]?.value?.toString().trim() ?? 'Unknown';
-      final testName = row[3]?.value?.toString().trim().toUpperCase() ?? '';
-      final resultYearStr = row[4]?.value?.toString().trim() ?? '2025';
-      final resultValue = row[5]?.value;
+      final gender = row[colMap['gender']!]?.value?.toString().trim() ?? 'Unknown';
+      final dob = row[colMap['dob']!]?.value?.toString().trim() ?? 'Unknown';
+      final region = row[colMap['region']!]?.value?.toString().trim() ?? 'Unknown';
+      final testName = row[colMap['testName']!]?.value?.toString().trim().toUpperCase() ?? '';
+      final resultYearStr = row[colMap['year']!]?.value?.toString().trim() ?? '2025';
+      final resultValue = row[colMap['value']!]?.value;
 
       if (testName.isEmpty || resultValue == null) continue;
 
@@ -330,6 +383,96 @@ class AnalysisProvider extends ChangeNotifier {
 
     _allPatients = tempPatientMap.values.toList();
     _updateFiltersList();
+  }
+
+  // Start Manual Registry from scratch
+  Future<void> startManualEntry() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _allPatients = [];
+      _filteredPatients = [];
+      _fileName = 'Manual Registry';
+      _fileSize = 0;
+      _updateFiltersList();
+      
+      await _cacheBox.put('patients_list', <Map<String, dynamic>>[]);
+      await _cacheBox.put('file_name', 'Manual Registry');
+      await _cacheBox.put('file_size', 0);
+      
+      _applyFilters();
+    } catch (e) {
+      _errorMessage = 'Failed to start manual registry: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Insert or Append a patient record manually
+  Future<void> addManualRecord({
+    required String gender,
+    required String dob,
+    required String region,
+    required String testName,
+    required int year,
+    required dynamic value,
+  }) async {
+    final cleanGender = gender.trim();
+    final cleanDob = dob.trim();
+    final cleanRegion = region.trim();
+    final cleanTest = testName.trim().toUpperCase();
+    
+    // Auto-detect double value if parseable
+    dynamic finalVal = value;
+    if (value is String) {
+      final doubleCheck = double.tryParse(value);
+      if (doubleCheck != null) {
+        finalVal = doubleCheck;
+      }
+    }
+
+    final key = '${cleanGender}_${cleanDob}_$cleanRegion'.toLowerCase();
+    
+    Patient? existing;
+    for (var p in _allPatients) {
+      if (p.uniqueKey == key) {
+        existing = p;
+        break;
+      }
+    }
+
+    if (existing != null) {
+      if (!existing.testHistory.containsKey(cleanTest)) {
+        existing.testHistory[cleanTest] = {};
+      }
+      existing.testHistory[cleanTest]![year] = finalVal;
+    } else {
+      final newPatient = Patient(
+        gender: cleanGender,
+        dateOfBirth: cleanDob,
+        region: cleanRegion,
+        testHistory: {
+          cleanTest: {year: finalVal}
+        },
+      );
+      _allPatients.add(newPatient);
+    }
+
+    _updateFiltersList();
+    
+    // Save to Hive cache
+    final List<Map<String, dynamic>> jsonList = _allPatients.map((p) => p.toJson()).toList();
+    await _cacheBox.put('patients_list', jsonList);
+    if (_fileName == null) {
+      _fileName = 'Manual Registry';
+      _fileSize = 0;
+      await _cacheBox.put('file_name', 'Manual Registry');
+      await _cacheBox.put('file_size', 0);
+    }
+    
+    _applyFilters();
   }
 
   // Setters for filters

@@ -48,17 +48,19 @@ void main() {
     });
   });
 
-  group('AnalysisProvider CSV Parsing Tests', () {
-    test('Parse CSV content correctly', () async {
+  group('AnalysisProvider Robust Parsing Tests', () {
+    test('Parse CSV with scrambled column order and blank lines at the top', () async {
       final provider = AnalysisProvider();
       
-      const csvData = 
-          "gender,dateofbirth,region_en,test_name,result_year,result_value\n"
-          "Male,1990,Riyadh,ALT,2025,45.5\n"
-          "Male,1990,Riyadh,AST,2025,38.0\n"
-          "Female,1995,Makkah,HBsAg,2025,positive\n";
+      const csvDataWithBlanksAndScrambled = 
+          "\n"
+          "\n"
+          "test_name,result_value,result_year,gender,dateofbirth,region_en\n"
+          "ALT,45.5,2025,Male,1990,Riyadh\n"
+          "AST,38.0,2025,Male,1990,Riyadh\n"
+          "HBsAg,positive,2025,Female,1995,Makkah\n";
 
-      final bytes = Uint8List.fromList(utf8.encode(csvData));
+      final bytes = Uint8List.fromList(utf8.encode(csvDataWithBlanksAndScrambled));
       
       // Wait for provider to load cached boxes
       await Future.delayed(const Duration(milliseconds: 100));
@@ -72,6 +74,42 @@ void main() {
       
       final makkahPrevalence = provider.regionAnalysisTable.firstWhere((r) => r['region'] == 'Makkah');
       expect(makkahPrevalence['patients'], 1);
+    });
+
+    test('Add record manually creates new patient or appends tests', () async {
+      final provider = AnalysisProvider();
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Clear data first
+      await provider.clearCache();
+      
+      // Add first record (creates patient)
+      await provider.addManualRecord(
+        gender: 'Female',
+        dob: '1988',
+        region: 'Jazan',
+        testName: 'ALT',
+        year: 2025,
+        value: '35',
+      );
+
+      expect(provider.totalPatientsCount, 1);
+      expect(provider.totalUniqueTestsCount, 1);
+      expect(provider.allPatients.first.getNumericValue('ALT'), 35.0);
+
+      // Add second record for the same patient (appends test)
+      await provider.addManualRecord(
+        gender: 'Female',
+        dob: '1988',
+        region: 'Jazan',
+        testName: 'HBsAg',
+        year: 2025,
+        value: 'positive',
+      );
+
+      expect(provider.totalPatientsCount, 1); // Stays 1 patient (merged!)
+      expect(provider.totalUniqueTestsCount, 2); // Now has 2 tests
+      expect(provider.allPatients.first.getBooleanValue('HBsAg'), true);
     });
   });
 }

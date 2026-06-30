@@ -209,7 +209,7 @@ class UploadScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Expected Columns: gender, dateofbirth, region_en, test_name, result_year, result_value',
+                            'Expected Columns (any order): gender, dateofbirth, region_en, test_name, result_year, result_value',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
@@ -220,6 +220,27 @@ class UploadScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // Manual Entry Option
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.edit_note, color: Colors.white),
+                    label: const Text(
+                      'Start with Manual Data Entry / ابدأ يدوياً',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    onPressed: () async {
+                      final provider = Provider.of<AnalysisProvider>(context, listen: false);
+                      await provider.startManualEntry();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isDark ? AppColors.primaryTeal : AppColors.primaryTealLight,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   
                   // Error Banner
                   if (provider.errorMessage != null) ...[
