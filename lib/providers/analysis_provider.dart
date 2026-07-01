@@ -336,31 +336,25 @@ class AnalysisProvider extends ChangeNotifier {
     final Map<String, Patient> tempPatientMap = {};
 
     int processedRowsCount = 0;
-    int consecutiveEmptyRows = 0;
 
     for (int i = startRow; i < maxRows; i++) {
       final row = sheet.rows[i];
-      
-      // Early exit if we encounter consecutive empty rows
-      if (row.isEmpty || row[colMap['gender']!]?.value == null) {
-        consecutiveEmptyRows++;
-        if (consecutiveEmptyRows >= 5) {
-          break;
-        }
-        continue;
-      }
-      
-      consecutiveEmptyRows = 0; // Reset counter on valid row
+      if (row.isEmpty) continue;
 
-      if (row.length <= colMap['value']! || row.length <= colMap['testName']!) continue;
+      // Extract and clean values safely checking row bounds
+      final genderVal = colMap['gender']! < row.length ? row[colMap['gender']!]?.value : null;
+      final dobVal = colMap['dob']! < row.length ? row[colMap['dob']!]?.value : null;
+      final regionVal = colMap['region']! < row.length ? row[colMap['region']!]?.value : null;
+      final testNameVal = colMap['testName']! < row.length ? row[colMap['testName']!]?.value : null;
+      final yearVal = colMap['year']! < row.length ? row[colMap['year']!]?.value : null;
+      final valueVal = colMap['value']! < row.length ? row[colMap['value']!]?.value : null;
 
-      // Extract and clean values to primitive Dart types
-      final gender = _cleanCellValue(row[colMap['gender']!]?.value)?.toString().trim() ?? 'Unknown';
-      final dob = _cleanCellValue(row[colMap['dob']!]?.value)?.toString().trim() ?? 'Unknown';
-      final region = _cleanCellValue(row[colMap['region']!]?.value)?.toString().trim() ?? 'Unknown';
-      final testName = _cleanCellValue(row[colMap['testName']!]?.value)?.toString().trim().toUpperCase() ?? '';
-      final resultYearStr = _cleanCellValue(row[colMap['year']!]?.value)?.toString().trim() ?? '2025';
-      final resultValue = _cleanCellValue(row[colMap['value']!]?.value);
+      final gender = _cleanCellValue(genderVal)?.toString().trim() ?? 'Unknown';
+      final dob = _cleanCellValue(dobVal)?.toString().trim() ?? 'Unknown';
+      final region = _cleanCellValue(regionVal)?.toString().trim() ?? 'Unknown';
+      final testName = _cleanCellValue(testNameVal)?.toString().trim().toUpperCase() ?? '';
+      final resultYearStr = _cleanCellValue(yearVal)?.toString().trim() ?? '2025';
+      final resultValue = _cleanCellValue(valueVal);
 
       if (testName.isEmpty || resultValue == null) continue;
 
