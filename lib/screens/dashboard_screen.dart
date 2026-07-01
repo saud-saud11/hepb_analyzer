@@ -392,9 +392,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           _buildStatCard(
                             context,
-                            title: 'Unique Tests Tracked',
-                            value: provider.totalUniqueTestsCount.toString(),
-                            subtitle: 'Clinical Markers in Excel',
+                            title: 'Total Test Records',
+                            value: provider.totalRecordsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},'),
+                            subtitle: '${provider.totalUniqueTestsCount} Clinical Markers Tracked',
                             icon: Icons.biotech_outlined,
                             color: AppColors.accentIndigo,
                             width: cardWidth,

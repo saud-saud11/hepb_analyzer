@@ -312,79 +312,86 @@ class AnalysisProvider extends ChangeNotifier {
   // Optimized Excel Parser with Dynamic Columns & Scrambled Header Support
   Future<void> _parseExcelFile(Uint8List bytes) async {
     final Excel excel = Excel.decodeBytes(bytes);
-    final String sheetName = excel.tables.keys.first;
-    final Sheet sheet = excel.tables[sheetName]!;
-    
-    final int maxRows = sheet.maxRows;
-    if (maxRows <= 1) {
-      throw Exception('The uploaded sheet is empty or contains only headers.');
-    }
-
-    // Convert sheet rows list to a list of lists of Cell values for scanner
-    final List<List<dynamic>> rowsList = [];
-    for (var row in sheet.rows) {
-      rowsList.add(row.map((cell) => cell?.value).toList());
-    }
-
-    // Find header dynamically
-    final headerRowIdx = _findHeaderRowIndex(rowsList);
-    final headerRow = sheet.rows[headerRowIdx];
-    final colMap = _findColumnIndexes(headerRow.map((c) => c?.value).toList());
-
-    final startRow = headerRowIdx + 1;
-    final int totalRowsToProcess = maxRows - startRow;
     final Map<String, Patient> tempPatientMap = {};
-
     int processedRowsCount = 0;
 
-    for (int i = startRow; i < maxRows; i++) {
-      final row = sheet.rows[i];
-      if (row.isEmpty) continue;
+    // Sum total rows across all sheets for progress calculation
+    int totalRowsAcrossSheets = 0;
+    for (var key in excel.tables.keys) {
+      totalRowsAcrossSheets += excel.tables[key]!.maxRows;
+    }
 
-      // Extract and clean values safely checking row bounds
-      final genderVal = colMap['gender']! < row.length ? row[colMap['gender']!]?.value : null;
-      final dobVal = colMap['dob']! < row.length ? row[colMap['dob']!]?.value : null;
-      final regionVal = colMap['region']! < row.length ? row[colMap['region']!]?.value : null;
-      final testNameVal = colMap['testName']! < row.length ? row[colMap['testName']!]?.value : null;
-      final yearVal = colMap['year']! < row.length ? row[colMap['year']!]?.value : null;
-      final valueVal = colMap['value']! < row.length ? row[colMap['value']!]?.value : null;
+    if (totalRowsAcrossSheets <= 1) {
+      throw Exception('The uploaded workbook contains no data rows.');
+    }
 
-      final gender = _cleanCellValue(genderVal)?.toString().trim() ?? 'Unknown';
-      final dob = _cleanCellValue(dobVal)?.toString().trim() ?? 'Unknown';
-      final region = _cleanCellValue(regionVal)?.toString().trim() ?? 'Unknown';
-      final testName = _cleanCellValue(testNameVal)?.toString().trim().toUpperCase() ?? '';
-      final resultYearStr = _cleanCellValue(yearVal)?.toString().trim() ?? '2025';
-      final resultValue = _cleanCellValue(valueVal);
+    for (var key in excel.tables.keys) {
+      final Sheet sheet = excel.tables[key]!;
+      final int maxRows = sheet.maxRows;
+      if (maxRows <= 1) continue;
 
-      if (testName.isEmpty || resultValue == null) continue;
-
-      final resultYear = int.tryParse(resultYearStr) ?? 2025;
-      final key = '${gender}_${dob}_$region'.toLowerCase();
-
-      Patient patient;
-      if (tempPatientMap.containsKey(key)) {
-        patient = tempPatientMap[key]!;
-      } else {
-        patient = Patient(
-          gender: gender,
-          dateOfBirth: dob,
-          region: region,
-          testHistory: {},
-        );
-        tempPatientMap[key] = patient;
+      // Convert sheet rows list to a list of lists of Cell values for scanner
+      final List<List<dynamic>> rowsList = [];
+      for (var row in sheet.rows) {
+        rowsList.add(row.map((cell) => cell?.value).toList());
       }
 
-      if (!patient.testHistory.containsKey(testName)) {
-        patient.testHistory[testName] = {};
-      }
-      patient.testHistory[testName]![resultYear] = resultValue;
+      // Find header dynamically for this sheet
+      final headerRowIdx = _findHeaderRowIndex(rowsList);
+      final headerRow = sheet.rows[headerRowIdx];
+      final colMap = _findColumnIndexes(headerRow.map((c) => c?.value).toList());
 
-      processedRowsCount++;
+      final startRow = headerRowIdx + 1;
 
-      if (processedRowsCount % 2000 == 0) {
-        _parseProgress = processedRowsCount / totalRowsToProcess;
-        notifyListeners();
-        await Future.delayed(Duration.zero);
+      for (int i = startRow; i < maxRows; i++) {
+        final row = sheet.rows[i];
+        if (row.isEmpty) continue;
+
+        // Extract and clean values safely checking row bounds
+        final genderVal = colMap['gender']! < row.length ? row[colMap['gender']!]?.value : null;
+        final dobVal = colMap['dob']! < row.length ? row[colMap['dob']!]?.value : null;
+        final regionVal = colMap['region']! < row.length ? row[colMap['region']!]?.value : null;
+        final testNameVal = colMap['testName']! < row.length ? row[colMap['testName']!]?.value : null;
+        final yearVal = colMap['year']! < row.length ? row[colMap['year']!]?.value : null;
+        final valueVal = colMap['value']! < row.length ? row[colMap['value']!]?.value : null;
+
+        final gender = _cleanCellValue(genderVal)?.toString().trim() ?? 'Unknown';
+        final dob = _cleanCellValue(dobVal)?.toString().trim() ?? 'Unknown';
+        final region = _cleanCellValue(regionVal)?.toString().trim() ?? 'Unknown';
+        final testName = _cleanCellValue(testNameVal)?.toString().trim().toUpperCase() ?? '';
+        final resultYearStr = _cleanCellValue(yearVal)?.toString().trim() ?? '2025';
+        final resultValue = _cleanCellValue(valueVal);
+
+        if (testName.isEmpty || resultValue == null) continue;
+
+        final resultYear = int.tryParse(resultYearStr) ?? 2025;
+        final keyPatient = '${gender}_${dob}_$region'.toLowerCase();
+
+        Patient patient;
+        if (tempPatientMap.containsKey(keyPatient)) {
+          patient = tempPatientMap[keyPatient]!;
+        } else {
+          patient = Patient(
+            gender: gender,
+            dateOfBirth: dob,
+            region: region,
+            testHistory: {},
+          );
+          tempPatientMap[keyPatient] = patient;
+        }
+
+        if (!patient.testHistory.containsKey(testName)) {
+          patient.testHistory[testName] = {};
+        }
+        patient.testHistory[testName]![resultYear] = resultValue;
+
+        processedRowsCount++;
+
+        if (processedRowsCount % 2000 == 0) {
+          _parseProgress = processedRowsCount / totalRowsAcrossSheets;
+          notifyListeners();
+          await Future.delayed(Duration.zero);
+        }
       }
     }
 
@@ -604,6 +611,16 @@ class AnalysisProvider extends ChangeNotifier {
   int get totalPatientsCount => _filteredPatients.length;
   int get totalUniqueTestsCount => _uniqueTestNames.length;
   int get totalRegionsCount => _availableRegions.length - 1; // Subtract 'All'
+
+  int get totalRecordsCount {
+    int count = 0;
+    for (var p in _filteredPatients) {
+      for (var history in p.testHistory.values) {
+        count += history.length;
+      }
+    }
+    return count;
+  }
 
   int get malesCount => _filteredPatients.where((p) => p.gender.toLowerCase() == 'male' || p.gender.toLowerCase() == 'm').length;
   int get femalesCount => _filteredPatients.where((p) => p.gender.toLowerCase() == 'female' || p.gender.toLowerCase() == 'f').length;
