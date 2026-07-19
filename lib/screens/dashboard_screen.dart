@@ -198,13 +198,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }).toList(),
                 border: pw.TableBorder.all(color: borderLight),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: secondaryColor),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.teal50),
                 cellStyle: const pw.TextStyle(fontSize: 9),
                 cellAlignment: pw.Alignment.centerLeft,
-                rowDecorations: [
-                  const pw.BoxDecoration(color: PdfColors.white),
-                  const pw.BoxDecoration(color: PdfColors.teal50),
-                ],
               ),
 
               pw.Spacer(),

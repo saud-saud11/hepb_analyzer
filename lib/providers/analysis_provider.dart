@@ -200,6 +200,7 @@ class AnalysisProvider extends ChangeNotifier {
 
   // Helper: Find indexes mapping keywords to Excel/CSV columns
   Map<String, int> _findColumnIndexes(List<dynamic> headerRow) {
+    int idIdx = -1; // Default to -1 (not found)
     int genderIdx = 0;
     int dobIdx = 1;
     int regionIdx = 2;
@@ -211,7 +212,9 @@ class AnalysisProvider extends ChangeNotifier {
       final cell = headerRow[i];
       final String colName = cell?.toString().toLowerCase().trim() ?? '';
 
-      if (colName.contains('gender') || colName.contains('sex') || colName == 'جنس') {
+      if (colName.contains('patient_id') || colName.contains('patientid') || colName.contains('mrn') || colName == 'id' || colName.contains('رقم الملف') || colName.contains('رقم المريض') || colName.contains('national') || colName.contains('سجل') || colName.contains('identity') || (colName.contains('name') && !colName.contains('test')) || colName == 'اسم') {
+        idIdx = i;
+      } else if (colName.contains('gender') || colName.contains('sex') || colName == 'جنس') {
         genderIdx = i;
       } else if (colName.contains('dateofbirth') || colName.contains('dob') || colName.contains('birth') || colName.contains('ميلاد')) {
         dobIdx = i;
@@ -227,6 +230,7 @@ class AnalysisProvider extends ChangeNotifier {
     }
 
     return {
+      'id': idIdx,
       'gender': genderIdx,
       'dob': dobIdx,
       'region': regionIdx,
@@ -301,7 +305,12 @@ class AnalysisProvider extends ChangeNotifier {
         resultValue = resultValueStr;
       }
 
-      final key = '${gender}_${dob}_$region'.toLowerCase();
+      final hasId = colMap['id']! >= 0 && colMap['id']! < row.length;
+      final patientId = hasId ? row[colMap['id']!].trim() : '';
+
+      final key = patientId.isNotEmpty 
+          ? 'id_$patientId'.toLowerCase() 
+          : '${gender}_${dob}_$region'.toLowerCase();
 
       Patient patient;
       if (tempPatientMap.containsKey(key)) {
@@ -379,6 +388,7 @@ class AnalysisProvider extends ChangeNotifier {
         final testNameVal = colMap['testName']! < row.length ? row[colMap['testName']!]?.value : null;
         final yearVal = colMap['year']! < row.length ? row[colMap['year']!]?.value : null;
         final valueVal = colMap['value']! < row.length ? row[colMap['value']!]?.value : null;
+        final idVal = colMap['id']! >= 0 && colMap['id']! < row.length ? row[colMap['id']!]?.value : null;
 
         final gender = _cleanCellValue(genderVal)?.toString().trim() ?? 'Unknown';
         final dob = _cleanCellValue(dobVal)?.toString().trim() ?? 'Unknown';
@@ -386,11 +396,15 @@ class AnalysisProvider extends ChangeNotifier {
         final testName = _cleanCellValue(testNameVal)?.toString().trim().toUpperCase() ?? '';
         final resultYearStr = _cleanCellValue(yearVal)?.toString().trim() ?? '2025';
         final resultValue = _cleanCellValue(valueVal);
+        final patientId = _cleanCellValue(idVal)?.toString().trim() ?? '';
 
         if (testName.isEmpty || resultValue == null) continue;
 
         final resultYear = int.tryParse(resultYearStr) ?? 2025;
-        final keyPatient = '${gender}_${dob}_$region'.toLowerCase();
+        
+        final keyPatient = patientId.isNotEmpty 
+            ? 'id_$patientId'.toLowerCase() 
+            : '${gender}_${dob}_$region'.toLowerCase();
 
         Patient patient;
         if (tempPatientMap.containsKey(keyPatient)) {
