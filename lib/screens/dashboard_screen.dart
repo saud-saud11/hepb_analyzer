@@ -43,70 +43,354 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _exportPdfReport(BuildContext context, AnalysisProvider provider) async {
     final pdf = pw.Document();
     
+    // Page 1 data
     final int total = provider.totalPatientsCount;
+    final int totalTests = provider.totalRecordsCount;
     final int uniqueTests = provider.totalUniqueTestsCount;
     final int regionsCount = provider.totalRegionsCount;
     final List<Map<String, dynamic>> regionsTable = provider.regionAnalysisTable;
+    final String sourceFile = provider.fileName ?? "Local Database Cache";
+
+    // Page 2 data (Age Groups)
+    final ageGroups = provider.ageGroupDistribution;
+    
+    // Test breakdown for selected test
+    final String activeTest = _selectedTest ?? (provider.uniqueTestNames.isNotEmpty ? provider.uniqueTestNames.first : 'N/A');
+    final Map<String, int> testBreakdown = provider.getTestResultBreakdown(activeTest);
+    final Map<String, double> testStats = provider.getTestNumericalStats(activeTest);
+
+    // Color theme
+    final primaryColor = PdfColors.teal;
+    final secondaryColor = PdfColors.indigo900;
+    final textColor = PdfColors.grey900;
+    final textMuted = PdfColors.grey600;
+    final borderLight = PdfColors.grey300;
 
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.all(32),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Header(
-                  level: 0,
-                  child: pw.Text(
-                    'Hepatitis B Patient Registry Analysis Report',
-                    style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
-                  ),
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // 1. Poster Header Banner
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(20),
+                decoration: pw.BoxDecoration(
+                  color: primaryColor,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
                 ),
-                pw.SizedBox(height: 12),
-                pw.Text('Generated on: ${DateTime.now().toString().split('.').first}'),
-                pw.Text('Source File: ${provider.fileName ?? "Local Database Cache"}'),
-                pw.Divider(),
-                
-                pw.SizedBox(height: 16),
-                pw.Text('1. Cohort Overview', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 8),
-                pw.Bullet(text: 'Total Registry Patients: $total'),
-                pw.Bullet(text: 'Unique Clinical Tests: $uniqueTests'),
-                pw.Bullet(text: 'Saudi Regions Represented: $regionsCount'),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'HEPATITIS B PATIENT REGISTRY REPORT',
+                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Epidemiological Prevalence & Cohort Demographics Dashboard',
+                      style: const pw.TextStyle(fontSize: 11, color: PdfColors.teal100),
+                    ),
+                    pw.SizedBox(height: 12),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Source File: $sourceFile', style: const pw.TextStyle(fontSize: 9, color: PdfColors.white)),
+                        pw.Text('Report Date: ${DateTime.now().toString().split('.').first}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.white)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
 
-                pw.SizedBox(height: 20),
-                pw.Text('2. Region Prevalence & Distribution', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 10),
-                
-                // Simplified Region Table for PDF
-                pw.TableHelper.fromTextArray(
-                  headers: ['Region', 'Population', 'Excel Patients', 'Prevalence', 'Cohort Share'],
-                  data: regionsTable.map((row) {
-                    final prevVal = row['prevalence'] as double;
-                    final prevPer100k = prevVal * 1000; // cases per 100k
-                    return [
-                      row['region'].toString(),
-                      row['population'].toString(),
-                      row['patients'].toString(),
-                      '${prevVal.toStringAsFixed(5)}% (${prevPer100k.toStringAsFixed(1)}/100k)',
-                      '${row['cohortShare']}%',
-                    ];
-                  }).toList(),
-                  border: pw.TableBorder.all(color: PdfColors.grey300),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  cellAlignment: pw.Alignment.centerLeft,
-                ),
-                
-                pw.SizedBox(height: 30),
-                pw.Divider(),
-                pw.Align(
-                  alignment: pw.Alignment.center,
-                  child: pw.Text('Confidential - Medical Research Registry Use Only', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey)),
-                ),
-              ],
-            ),
+              // 2. Stats Cards
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  // Card 1
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(12),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: borderLight),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Registry Patients', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('$total', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('${provider.malesCount} Males • ${provider.femalesCount} Females', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 12),
+                  // Card 2
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(12),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: borderLight),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Total Test Records', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('$totalTests', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('$uniqueTests Clinical Markers Tracked', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 12),
+                  // Card 3
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(12),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: borderLight),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Regions Represented', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('$regionsCount', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('Out of 13 Saudi Regions', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 24),
+
+              // 3. Geographic Distribution & Prevalence Table
+              pw.Text(
+                'Saudi Arabia Regional Prevalence & Distribution',
+                style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: secondaryColor),
+              ),
+              pw.SizedBox(height: 8),
+
+              pw.TableHelper.fromTextArray(
+                headers: ['Region / Administrative Area', 'Census Population', 'Registry Patients', 'Prevalence', 'Cohort Share'],
+                data: regionsTable.map((row) {
+                  final prevVal = row['prevalence'] as double;
+                  final prevPer100k = prevVal * 1000;
+                  return [
+                    row['region'].toString(),
+                    row['population'].toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},'),
+                    row['patients'].toString(),
+                    '${prevVal.toStringAsFixed(5)}% (${prevPer100k.toStringAsFixed(1)} per 100k)',
+                    '${row['cohortShare']}%',
+                  ];
+                }).toList(),
+                border: pw.TableBorder.all(color: borderLight),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: secondaryColor),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.teal50),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                cellAlignment: pw.Alignment.centerLeft,
+                rowDecorations: [
+                  const pw.BoxDecoration(color: PdfColors.white),
+                  const pw.BoxDecoration(color: PdfColors.teal50),
+                ],
+              ),
+
+              pw.Spacer(),
+              pw.Divider(color: borderLight),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Page 1 of 2', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                  pw.Text('Confidential - Medical Registry Report', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    // Page 2: Demographics and selected test breakdown
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Page header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('HEPATITIS B REGISTRY REPORT', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                  pw.Text('Cohort Demographics & Clinical Breakdown', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                ],
+              ),
+              pw.Divider(height: 12),
+              pw.SizedBox(height: 12),
+
+              // Two columns: Left for Age Groups, Right for Selected Test Breakdown
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  // Left Column: Age Group Distribution
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(12),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: borderLight),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Age Group Distribution',
+                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: secondaryColor),
+                          ),
+                          pw.SizedBox(height: 12),
+                          
+                          // Loop through age groups
+                          ...ageGroups.map((group) {
+                            final double percent = group['percentage'] as double;
+                            final int count = group['count'] as int;
+                            final int males = group['males'] as int;
+                            final int females = group['females'] as int;
+
+                            return pw.Padding(
+                              padding: const pw.EdgeInsets.only(bottom: 12),
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Row(
+                                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      pw.Text(group['group'].toString(), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                                      pw.Text('$count pts (${percent.toStringAsFixed(1)}%)', style: pw.TextStyle(fontSize: 9, color: primaryColor, fontWeight: pw.FontWeight.bold)),
+                                    ],
+                                  ),
+                                  pw.SizedBox(height: 4),
+                                  
+                                  // Simple progress bar
+                                  pw.Stack(
+                                    children: [
+                                      pw.Container(
+                                        height: 8,
+                                        width: double.infinity,
+                                        decoration: const pw.BoxDecoration(
+                                          color: PdfColors.grey200,
+                                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                                        ),
+                                      ),
+                                      pw.Container(
+                                        height: 8,
+                                        width: percent > 0 ? (percent / 100) * 150 : 0, // estimate width factor
+                                        decoration: pw.BoxDecoration(
+                                          color: primaryColor,
+                                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text('$males Males • $females Females', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 20),
+
+                  // Right Column: Selected Test Breakdown
+                  pw.Expanded(
+                    flex: 1,
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(12),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: borderLight),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Marker Analysis: $activeTest',
+                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: secondaryColor),
+                          ),
+                          pw.SizedBox(height: 12),
+
+                          if (testBreakdown.isNotEmpty) ...[
+                            // Table representation of the pie breakdown
+                            pw.TableHelper.fromTextArray(
+                              headers: ['Result Class / Value', 'Count', 'Share'],
+                              data: testBreakdown.entries.map((entry) {
+                                final share = total > 0 ? (entry.value / total) * 100 : 0.0;
+                                return [
+                                  entry.key,
+                                  entry.value.toString(),
+                                  '${share.toStringAsFixed(1)}%',
+                                ];
+                              }).toList(),
+                              border: pw.TableBorder.all(color: borderLight),
+                              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: secondaryColor),
+                              cellStyle: const pw.TextStyle(fontSize: 8),
+                              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                            ),
+                            
+                            pw.SizedBox(height: 16),
+                            
+                            // Quantitative Statistics
+                            if (testStats.isNotEmpty) ...[
+                              pw.Text(
+                                'Numerical Statistics',
+                                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: secondaryColor),
+                              ),
+                              pw.SizedBox(height: 6),
+                              pw.Bullet(text: 'Mean (Average Value): ${testStats['mean']}', style: const pw.TextStyle(fontSize: 9)),
+                              pw.Bullet(text: 'Minimum Measured: ${testStats['min']}', style: const pw.TextStyle(fontSize: 9)),
+                              pw.Bullet(text: 'Maximum Measured: ${testStats['max']}', style: const pw.TextStyle(fontSize: 9)),
+                            ] else ...[
+                              pw.Text(
+                                'This is a qualitative marker with categorical values (Positive/Negative/Reactive).',
+                                style: pw.TextStyle(fontSize: 9, color: textMuted, fontStyle: pw.FontStyle.italic),
+                              ),
+                            ]
+                          ] else ...[
+                            pw.Text('No test data available for $activeTest.', style: pw.TextStyle(fontSize: 9, color: textMuted)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.Spacer(),
+              pw.Divider(color: borderLight),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Page 2 of 2', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                  pw.Text('Confidential - Generated by HepB Registry Analyzer', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                ],
+              ),
+            ],
           );
         },
       ),
@@ -114,7 +398,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'hepb_prevalence_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      name: 'hepb_prevalence_poster_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
   }
 
