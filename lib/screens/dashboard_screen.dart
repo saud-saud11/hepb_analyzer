@@ -71,7 +71,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(bottom: 12),
             padding: const pw.EdgeInsets.only(bottom: 4),
-            border: const pw.Border(bottom: pw.BorderSide(color: PdfColors.teal, width: 0.5)),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(color: PdfColors.teal, width: 0.5)),
+            ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -86,7 +88,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             alignment: pw.Alignment.center,
             margin: const pw.EdgeInsets.only(top: 12),
             padding: const pw.EdgeInsets.only(top: 4),
-            border: const pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
