@@ -200,21 +200,20 @@ class AnalysisProvider extends ChangeNotifier {
 
   // Helper: Find indexes mapping keywords to Excel/CSV columns
   Map<String, int> _findColumnIndexes(List<dynamic> headerRow) {
-    int idIdx = -1; // Default to -1 (not found)
-    int genderIdx = 0;
-    int dobIdx = 1;
-    int regionIdx = 2;
-    int testNameIdx = 3;
-    int yearIdx = 4;
-    int valueIdx = 5;
+    int idIdx = -1;
+    int genderIdx = -1;
+    int dobIdx = -1;
+    int regionIdx = -1;
+    int testNameIdx = -1;
+    int yearIdx = -1;
+    int valueIdx = -1;
 
+    // First Pass: Find primary clinical/demographic columns
     for (int i = 0; i < headerRow.length; i++) {
       final cell = headerRow[i];
       final String colName = cell?.toString().toLowerCase().trim() ?? '';
 
-      if (colName.contains('patient_id') || colName.contains('patientid') || colName.contains('mrn') || colName == 'id' || colName.contains('رقم الملف') || colName.contains('رقم المريض') || colName.contains('national') || colName.contains('سجل') || colName.contains('identity') || (colName.contains('name') && !colName.contains('test')) || colName == 'اسم') {
-        idIdx = i;
-      } else if (colName.contains('gender') || colName.contains('sex') || colName == 'جنس') {
+      if (colName.contains('gender') || colName.contains('sex') || colName == 'جنس') {
         genderIdx = i;
       } else if (colName.contains('dateofbirth') || colName.contains('dob') || colName.contains('birth') || colName.contains('ميلاد')) {
         dobIdx = i;
@@ -226,6 +225,49 @@ class AnalysisProvider extends ChangeNotifier {
         yearIdx = i;
       } else if (colName.contains('result_value') || colName.contains('value') || colName.contains('result') || colName.contains('نتيجة') || colName.contains('النتيجة')) {
         valueIdx = i;
+      }
+    }
+
+    // Set defaults for primary columns if not found to avoid out of bounds
+    genderIdx = genderIdx == -1 ? 0 : genderIdx;
+    dobIdx = dobIdx == -1 ? 1 : dobIdx;
+    regionIdx = regionIdx == -1 ? 2 : regionIdx;
+    testNameIdx = testNameIdx == -1 ? 3 : testNameIdx;
+    yearIdx = yearIdx == -1 ? 4 : yearIdx;
+    valueIdx = valueIdx == -1 ? 5 : valueIdx;
+
+    // Second Pass: Find Patient ID / MRN from the remaining columns
+    for (int i = 0; i < headerRow.length; i++) {
+      // Skip already matched primary columns
+      if (i == genderIdx || i == dobIdx || i == regionIdx || i == testNameIdx || i == yearIdx || i == valueIdx) {
+        continue;
+      }
+
+      final cell = headerRow[i];
+      final String colName = cell?.toString().toLowerCase().trim() ?? '';
+
+      if (colName.contains('patient') ||
+          colName.contains('mrn') ||
+          colName.contains('id') ||
+          colName.contains('no') ||
+          colName.contains('num') ||
+          colName.contains('serial') ||
+          colName.contains('seq') ||
+          colName.contains('record') ||
+          colName.contains('chart') ||
+          colName.contains('key') ||
+          colName.contains('code') ||
+          colName.contains('name') ||
+          colName.contains('رقم') ||
+          colName.contains('ملف') ||
+          colName.contains('سجل') ||
+          colName.contains('مريض') ||
+          colName.contains('مسلسل') ||
+          colName.contains('تسلسل') ||
+          colName.contains('هوية') ||
+          colName.contains('اسم')) {
+        idIdx = i;
+        break; // Found the best candidate for Patient ID
       }
     }
 
