@@ -171,13 +171,24 @@ class _SaudiArabiaMapState extends State<SaudiArabiaMap> with SingleTickerProvid
                                   Transform.scale(
                                     scale: pulseScale * 1.5,
                                     child: Container(
-                                      width: 32,
-                                      height: 32,
+                                      constraints: BoxConstraints(
+                                        minWidth: isSelected ? 36 : 28,
+                                        minHeight: isSelected ? 36 : 28,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
+                                        borderRadius: BorderRadius.circular(16),
                                         color: isSelected 
                                             ? AppColors.dangerRed.withOpacity(pulseOpacity)
                                             : AppColors.primaryTealLight.withOpacity(pulseOpacity),
+                                      ),
+                                      child: Text(
+                                        count.toString(),
+                                        style: TextStyle(
+                                          color: Colors.transparent,
+                                          fontSize: isSelected ? 11 : 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -185,10 +196,13 @@ class _SaudiArabiaMapState extends State<SaudiArabiaMap> with SingleTickerProvid
                                 // Core Badge
                                 AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
-                                  width: isSelected ? 36 : 28,
-                                  height: isSelected ? 36 : 28,
+                                  constraints: BoxConstraints(
+                                    minWidth: isSelected ? 36 : 28,
+                                    minHeight: isSelected ? 36 : 28,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
+                                    borderRadius: BorderRadius.circular(16),
                                     color: isSelected 
                                         ? AppColors.dangerRed 
                                         : (count > 0 ? AppColors.primaryTeal : Colors.grey[700]),
@@ -205,6 +219,8 @@ class _SaudiArabiaMapState extends State<SaudiArabiaMap> with SingleTickerProvid
                                     ],
                                   ),
                                   child: Center(
+                                    widthFactor: 1.0,
+                                    heightFactor: 1.0,
                                     child: Text(
                                       count.toString(),
                                       style: TextStyle(
