@@ -236,7 +236,7 @@ class AnalysisProvider extends ChangeNotifier {
     yearIdx = yearIdx == -1 ? 4 : yearIdx;
     valueIdx = valueIdx == -1 ? 5 : valueIdx;
 
-    // Second Pass: Find Patient ID / MRN from the remaining columns with high cardinality
+    // Second Pass: Find Patient ID / MRN from the remaining columns
     double highestCardinality = 0.0;
     int bestIdIdx = -1;
 
@@ -249,13 +249,26 @@ class AnalysisProvider extends ChangeNotifier {
       final cell = headerRow[i];
       final String colName = cell?.toString().toLowerCase().trim() ?? '';
 
-      // Check if header name matches ID-like keywords
-      final bool matchesKeyword = colName.contains('patient') ||
+      // High-confidence keywords bypass cardinality validation checks completely
+      final bool isHighConfidence = colName.contains('serial') ||
+          colName.contains('patient_id') ||
+          colName.contains('patientid') ||
           colName.contains('mrn') ||
+          colName.contains('رقم الملف') ||
+          colName.contains('رقم المريض') ||
+          colName.contains('الرقم التسلسلي') ||
+          colName == 'serial';
+
+      if (isHighConfidence) {
+        bestIdIdx = i;
+        break; // Match immediately!
+      }
+
+      // Check if header name matches low-confidence ID-like keywords
+      final bool matchesKeyword = colName.contains('patient') ||
           colName.contains('id') ||
           colName.contains('no') ||
           colName.contains('num') ||
-          colName.contains('serial') ||
           colName.contains('seq') ||
           colName.contains('record') ||
           colName.contains('chart') ||
