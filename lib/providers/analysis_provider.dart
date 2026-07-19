@@ -158,11 +158,20 @@ class AnalysisProvider extends ChangeNotifier {
         throw Exception('Unsupported file format. Please upload .csv or .xlsx files.');
       }
 
-      // Cache the parsed list in Hive
-      final List<Map<String, dynamic>> jsonList = _allPatients.map((p) => p.toJson()).toList();
-      await _cacheBox.put('patients_list', jsonList);
-      await _cacheBox.put('file_name', name);
-      await _cacheBox.put('file_size', size);
+      // Cache the parsed list in Hive (skip if too large to prevent browser IndexedDB OOM / crash)
+      try {
+        if (_allPatients.length <= 5000) {
+          final List<Map<String, dynamic>> jsonList = _allPatients.map((p) => p.toJson()).toList();
+          await _cacheBox.put('patients_list', jsonList);
+        } else {
+          // Clear old patient cache to avoid mixing datasets
+          await _cacheBox.delete('patients_list');
+        }
+        await _cacheBox.put('file_name', name);
+        await _cacheBox.put('file_size', size);
+      } catch (cacheError) {
+        debugPrint('Cache write failed (skipped safely): $cacheError');
+      }
 
       _applyFilters();
     } catch (e) {
@@ -229,16 +238,32 @@ class AnalysisProvider extends ChangeNotifier {
 
   // Fast CSV Parser with Dynamic Columns & Scrambled Header Support
   Future<void> _parseCsvFile(Uint8List bytes) async {
-    final String csvText = utf8.decode(bytes);
+    // allowMalformed: true handles files in Windows-1256/ANSI encoding gracefully
+    final String csvText = utf8.decode(bytes, allowMalformed: true);
     final List<String> lines = csvText.split(RegExp(r'\r?\n'));
     if (lines.isEmpty) return;
+
+    // Auto-detect delimiter from the first non-empty line
+    final String firstLine = lines.firstWhere((line) => line.trim().isNotEmpty, orElse: () => '');
+    String delimiter = ',';
+    if (firstLine.isNotEmpty) {
+      final int commas = ','.allMatches(firstLine).length;
+      final int semicolons = ';'.allMatches(firstLine).length;
+      final int tabs = '\t'.allMatches(firstLine).length;
+      
+      if (semicolons > commas && semicolons > tabs) {
+        delimiter = ';';
+      } else if (tabs > commas && tabs > semicolons) {
+        delimiter = '\t';
+      }
+    }
 
     // Build lists of rows
     final List<List<String>> rows = [];
     for (var line in lines) {
       final cleanLine = line.trim();
       if (cleanLine.isEmpty) continue;
-      rows.add(cleanLine.split(',').map((cell) => cell.replaceAll('"', '').trim()).toList());
+      rows.add(cleanLine.split(delimiter).map((cell) => cell.replaceAll('"', '').trim()).toList());
     }
 
     if (rows.isEmpty) return;
