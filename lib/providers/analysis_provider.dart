@@ -199,7 +199,7 @@ class AnalysisProvider extends ChangeNotifier {
   }
 
   // Helper: Find indexes mapping keywords to Excel/CSV columns
-  Map<String, int> _findColumnIndexes(List<dynamic> headerRow) {
+  Map<String, int> _findColumnIndexes(List<dynamic> headerRow, List<List<dynamic>> dataRows) {
     int idIdx = -1;
     int genderIdx = -1;
     int dobIdx = -1;
@@ -236,7 +236,10 @@ class AnalysisProvider extends ChangeNotifier {
     yearIdx = yearIdx == -1 ? 4 : yearIdx;
     valueIdx = valueIdx == -1 ? 5 : valueIdx;
 
-    // Second Pass: Find Patient ID / MRN from the remaining columns
+    // Second Pass: Find Patient ID / MRN from the remaining columns with high cardinality
+    double highestCardinality = 0.0;
+    int bestIdIdx = -1;
+
     for (int i = 0; i < headerRow.length; i++) {
       // Skip already matched primary columns
       if (i == genderIdx || i == dobIdx || i == regionIdx || i == testNameIdx || i == yearIdx || i == valueIdx) {
@@ -246,7 +249,8 @@ class AnalysisProvider extends ChangeNotifier {
       final cell = headerRow[i];
       final String colName = cell?.toString().toLowerCase().trim() ?? '';
 
-      if (colName.contains('patient') ||
+      // Check if header name matches ID-like keywords
+      final bool matchesKeyword = colName.contains('patient') ||
           colName.contains('mrn') ||
           colName.contains('id') ||
           colName.contains('no') ||
@@ -265,11 +269,37 @@ class AnalysisProvider extends ChangeNotifier {
           colName.contains('مسلسل') ||
           colName.contains('تسلسل') ||
           colName.contains('هوية') ||
-          colName.contains('اسم')) {
-        idIdx = i;
-        break; // Found the best candidate for Patient ID
+          colName.contains('اسم');
+
+      if (matchesKeyword) {
+        // Calculate cardinality of this column in the first 100 rows
+        final Set<String> uniqueValues = {};
+        int sampleCount = 0;
+        for (int r = 0; r < 100 && r < dataRows.length; r++) {
+          final row = dataRows[r];
+          if (i < row.length) {
+            final valStr = row[i]?.toString().trim() ?? '';
+            if (valStr.isNotEmpty) {
+              uniqueValues.add(valStr);
+              sampleCount++;
+            }
+          }
+        }
+        
+        if (sampleCount > 0) {
+          final double ratio = uniqueValues.length / sampleCount;
+          // Cardinality must be high to be a Patient ID (reject low cardinality like hospital name or status)
+          if (uniqueValues.length > 15 || ratio > 0.4) {
+            if (ratio > highestCardinality) {
+              highestCardinality = ratio;
+              bestIdIdx = i;
+            }
+          }
+        }
       }
     }
+
+    idIdx = bestIdIdx;
 
     return {
       'id': idIdx,
@@ -317,7 +347,7 @@ class AnalysisProvider extends ChangeNotifier {
     // Detect header row dynamically
     final headerRowIdx = _findHeaderRowIndex(rows);
     final headerRow = rows[headerRowIdx];
-    final colMap = _findColumnIndexes(headerRow);
+    final colMap = _findColumnIndexes(headerRow, rows.sublist(headerRowIdx + 1));
 
     final startIdx = headerRowIdx + 1;
     final int totalLinesToProcess = rows.length - startIdx;
@@ -415,7 +445,7 @@ class AnalysisProvider extends ChangeNotifier {
       // Find header dynamically for this sheet
       final headerRowIdx = _findHeaderRowIndex(rowsList);
       final headerRow = sheet.rows[headerRowIdx];
-      final colMap = _findColumnIndexes(headerRow.map((c) => c?.value).toList());
+      final colMap = _findColumnIndexes(headerRow.map((c) => c?.value).toList(), rowsList.sublist(headerRowIdx + 1));
 
       final startRow = headerRowIdx + 1;
 
