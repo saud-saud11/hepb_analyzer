@@ -321,6 +321,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
               int recordsCount = 0;
               testBreakdown.values.forEach((v) => recordsCount += v);
 
+              // Sort entries by count descending to show most common values first
+              final sortedEntries = testBreakdown.entries.toList()
+                ..sort((a, b) => b.value.compareTo(a.value));
+              
+              final List<MapEntry<String, int>> displayEntries = sortedEntries.take(8).toList();
+              int otherCount = 0;
+              if (sortedEntries.length > 8) {
+                for (int j = 8; j < sortedEntries.length; j++) {
+                  otherCount += sortedEntries[j].value;
+                }
+              }
+
+              final List<List<String>> tableData = displayEntries.map((entry) {
+                final share = recordsCount > 0 ? (entry.value / recordsCount) * 100 : 0.0;
+                return [
+                  entry.key,
+                  entry.value.toString(),
+                  '${share.toStringAsFixed(1)}%',
+                ];
+              }).toList();
+
+              if (otherCount > 0) {
+                final otherShare = recordsCount > 0 ? (otherCount / recordsCount) * 100 : 0.0;
+                tableData.add([
+                  'Other Values',
+                  otherCount.toString(),
+                  '${otherShare.toStringAsFixed(1)}%',
+                ]);
+              }
+
               return pw.Container(
                 margin: const pw.EdgeInsets.only(bottom: 16),
                 padding: const pw.EdgeInsets.all(12),
@@ -355,14 +385,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           flex: 3,
                           child: pw.TableHelper.fromTextArray(
                             headers: ['Result Class / Value', 'Count', 'Share'],
-                            data: testBreakdown.entries.map((entry) {
-                              final share = recordsCount > 0 ? (entry.value / recordsCount) * 100 : 0.0;
-                              return [
-                                entry.key,
-                                entry.value.toString(),
-                                '${share.toStringAsFixed(1)}%',
-                              ];
-                            }).toList(),
+                            data: tableData,
                             border: pw.TableBorder.all(color: PdfColors.grey200),
                             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: secondaryColor),
                             cellStyle: const pw.TextStyle(fontSize: 8),
