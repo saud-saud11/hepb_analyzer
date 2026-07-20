@@ -237,7 +237,8 @@ class AnalysisProvider extends ChangeNotifier {
     valueIdx = valueIdx == -1 ? 5 : valueIdx;
 
     // Second Pass: Find Patient ID / MRN from the remaining columns
-    double highestCardinality = 0.0;
+    // A true Patient ID / MRN column groups multiple test rows for the same patient together.
+    // We explicitly REJECT columns that are 100% unique row sequence numbers (1, 2, 3... N).
     int bestIdIdx = -1;
 
     for (int i = 0; i < headerRow.length; i++) {
@@ -249,66 +250,65 @@ class AnalysisProvider extends ChangeNotifier {
       final cell = headerRow[i];
       final String colName = cell?.toString().toLowerCase().trim() ?? '';
 
-      // High-confidence keywords bypass cardinality validation checks completely
-      final bool isHighConfidence = colName.contains('serial') ||
-          colName.contains('patient_id') ||
+      // Sample first 100 rows to evaluate uniqueness and sequence
+      final List<String> sampleValues = [];
+      final Set<String> uniqueSet = {};
+      for (int r = 0; r < 100 && r < dataRows.length; r++) {
+        final row = dataRows[r];
+        if (i < row.length) {
+          final valStr = row[i]?.toString().trim() ?? '';
+          if (valStr.isNotEmpty) {
+            sampleValues.add(valStr);
+            uniqueSet.add(valStr);
+          }
+        }
+      }
+
+      // Check if values are 100% unique row sequence numbers (1, 2, 3, 4... N)
+      bool isRowSequence = false;
+      if (sampleValues.length > 5 && uniqueSet.length == sampleValues.length) {
+        int numericMatchCount = 0;
+        for (int idx = 0; idx < sampleValues.length; idx++) {
+          if (int.tryParse(sampleValues[idx]) != null) numericMatchCount++;
+        }
+        // If 100% of sample values are unique integers 1..N, it's a row sequence/serial, NOT a Patient MRN
+        if (numericMatchCount == sampleValues.length) {
+          isRowSequence = true;
+        }
+      }
+
+      if (isRowSequence) {
+        continue; // Reject row serial sequence numbers
+      }
+
+      // High-confidence Patient MRN / ID keywords
+      final bool isExplicitMrn = colName.contains('patient_id') ||
           colName.contains('patientid') ||
           colName.contains('mrn') ||
           colName.contains('رقم الملف') ||
           colName.contains('رقم المريض') ||
-          colName.contains('الرقم التسلسلي') ||
-          colName == 'serial';
+          colName.contains('الهوية') ||
+          colName.contains('national_id') ||
+          colName == 'mrn' ||
+          colName == 'patient_id';
 
-      if (isHighConfidence) {
+      if (isExplicitMrn) {
         bestIdIdx = i;
-        break; // Match immediately!
+        break; // Match primary MRN immediately
       }
 
-      // Check if header name matches low-confidence ID-like keywords
+      // Secondary candidate ID keywords (only if not a row sequence)
       final bool matchesKeyword = colName.contains('patient') ||
           colName.contains('id') ||
-          colName.contains('no') ||
-          colName.contains('num') ||
-          colName.contains('seq') ||
-          colName.contains('record') ||
-          colName.contains('chart') ||
-          colName.contains('key') ||
           colName.contains('code') ||
-          colName.contains('name') ||
+          colName.contains('chart') ||
+          colName.contains('record') ||
           colName.contains('رقم') ||
           colName.contains('ملف') ||
-          colName.contains('سجل') ||
-          colName.contains('مريض') ||
-          colName.contains('مسلسل') ||
-          colName.contains('تسلسل') ||
-          colName.contains('هوية') ||
-          colName.contains('اسم');
+          colName.contains('مريض');
 
-      if (matchesKeyword) {
-        // Calculate cardinality of this column in the first 100 rows
-        final Set<String> uniqueValues = {};
-        int sampleCount = 0;
-        for (int r = 0; r < 100 && r < dataRows.length; r++) {
-          final row = dataRows[r];
-          if (i < row.length) {
-            final valStr = row[i]?.toString().trim() ?? '';
-            if (valStr.isNotEmpty) {
-              uniqueValues.add(valStr);
-              sampleCount++;
-            }
-          }
-        }
-        
-        if (sampleCount > 0) {
-          final double ratio = uniqueValues.length / sampleCount;
-          // Cardinality must be high to be a Patient ID (reject low cardinality like hospital name or status)
-          if (uniqueValues.length > 15 || ratio > 0.4) {
-            if (ratio > highestCardinality) {
-              highestCardinality = ratio;
-              bestIdIdx = i;
-            }
-          }
-        }
+      if (matchesKeyword && bestIdIdx == -1) {
+        bestIdIdx = i;
       }
     }
 
