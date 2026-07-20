@@ -281,14 +281,17 @@ class AnalysisProvider extends ChangeNotifier {
         continue; // Reject row serial sequence numbers
       }
 
-      // High-confidence Patient MRN / ID keywords
-      final bool isExplicitMrn = colName.contains('patient_id') ||
+      // High-confidence Patient MRN / ID keywords (prioritizing patient_personal_id)
+      final bool isExplicitMrn = colName.contains('patient_personal_id') ||
+          colName.contains('personal_id') ||
+          colName.contains('patient_id') ||
           colName.contains('patientid') ||
           colName.contains('mrn') ||
           colName.contains('رقم الملف') ||
           colName.contains('رقم المريض') ||
           colName.contains('الهوية') ||
           colName.contains('national_id') ||
+          colName == 'patient_personal_id' ||
           colName == 'mrn' ||
           colName == 'patient_id';
 
