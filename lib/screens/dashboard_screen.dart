@@ -1374,7 +1374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
             colors: isDark
-                ? [AppColors.darkCard, AppColors.darkBackground]
+                ? [AppColors.darkCard, AppColors.darkBg]
                 : [Colors.teal.shade50.withOpacity(0.4), Colors.white],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
