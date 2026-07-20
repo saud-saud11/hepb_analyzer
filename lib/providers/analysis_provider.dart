@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:excel/excel.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -60,6 +61,10 @@ class AnalysisProvider extends ChangeNotifier {
   int? _fileSize;
   String? _errorMessage;
 
+  // Global parsing metrics to resolve discrepancies
+  int _totalFileLinesCount = 0;
+  int _invalidOrEmptyLinesCount = 0;
+
   // Cache Box
   static const String boxName = 'patients_cache_box';
   late Box _cacheBox;
@@ -84,6 +89,9 @@ class AnalysisProvider extends ChangeNotifier {
   String? get fileName => _fileName;
   int? get fileSize => _fileSize;
   String? get errorMessage => _errorMessage;
+
+  int get totalFileLinesCount => _totalFileLinesCount;
+  int get invalidOrEmptyLinesCount => _invalidOrEmptyLinesCount;
 
   String get selectedGender => _selectedGender;
   String get selectedRegion => _selectedRegion;
@@ -208,6 +216,8 @@ class AnalysisProvider extends ChangeNotifier {
       _groupingMode = 'demographics';
       _fileName = null;
       _fileSize = null;
+      _totalFileLinesCount = 0;
+      _invalidOrEmptyLinesCount = 0;
       _availableRegions = [];
       _availableYears = [];
       _uniqueTestNames = [];
@@ -263,6 +273,8 @@ class AnalysisProvider extends ChangeNotifier {
     _errorMessage = null;
     _fileName = name;
     _fileSize = size;
+    _totalFileLinesCount = 0;
+    _invalidOrEmptyLinesCount = 0;
     notifyListeners();
 
     try {
@@ -449,16 +461,14 @@ class AnalysisProvider extends ChangeNotifier {
   Future<void> _parseCsvFile(Uint8List bytes) async {
     // allowMalformed: true handles files in Windows-1256/ANSI encoding gracefully
     final String csvText = utf8.decode(bytes, allowMalformed: true);
-    final List<String> lines = csvText.split(RegExp(r'\r?\n'));
-    if (lines.isEmpty) return;
-
-    // Auto-detect delimiter from the first non-empty line
-    final String firstLine = lines.firstWhere((line) => line.trim().isNotEmpty, orElse: () => '');
+    
+    // Check delimiter
     String delimiter = ',';
-    if (firstLine.isNotEmpty) {
-      final int commas = ','.allMatches(firstLine).length;
-      final int semicolons = ';'.allMatches(firstLine).length;
-      final int tabs = '\t'.allMatches(firstLine).length;
+    final firstLines = csvText.split('\n').take(5).join('\n');
+    if (firstLines.isNotEmpty) {
+      final int commas = ','.allMatches(firstLines).length;
+      final int semicolons = ';'.allMatches(firstLines).length;
+      final int tabs = '\t'.allMatches(firstLines).length;
       
       if (semicolons > commas && semicolons > tabs) {
         delimiter = ';';
@@ -467,15 +477,13 @@ class AnalysisProvider extends ChangeNotifier {
       }
     }
 
-    // Build lists of rows
-    final List<List<String>> rows = [];
-    for (var line in lines) {
-      final cleanLine = line.trim();
-      if (cleanLine.isEmpty) continue;
-      rows.add(cleanLine.split(delimiter).map((cell) => cell.replaceAll('"', '').trim()).toList());
-    }
+    // Use robust csv package for parsing
+    final List<List<dynamic>> rows = CsvToListConverter(eol: '\n').convert(csvText, fieldDelimiter: delimiter);
 
     if (rows.isEmpty) return;
+
+    _totalFileLinesCount = rows.length;
+    _invalidOrEmptyLinesCount = 0;
 
     // Detect header row dynamically
     final headerRowIdx = _findHeaderRowIndex(rows);
@@ -489,16 +497,27 @@ class AnalysisProvider extends ChangeNotifier {
 
     for (int i = startIdx; i < rows.length; i++) {
       final row = rows[i];
-      if (row.length <= colMap['value']! || row.length <= colMap['testName']!) continue;
+      if (row.isEmpty || row.every((c) => c == null || c.toString().trim().isEmpty)) {
+         _invalidOrEmptyLinesCount++;
+         continue;
+      }
+      
+      if (row.length <= colMap['value']! || row.length <= colMap['testName']!) {
+         _invalidOrEmptyLinesCount++;
+         continue;
+      }
 
-      final gender = row[colMap['gender']!];
-      final dob = row[colMap['dob']!];
-      final region = row[colMap['region']!];
-      final testName = row[colMap['testName']!].toUpperCase();
-      final resultYearStr = row[colMap['year']!];
-      final resultValueStr = row[colMap['value']!];
+      final gender = _cleanCellValue(row[colMap['gender']!])?.toString() ?? '';
+      final dob = _cleanCellValue(row[colMap['dob']!])?.toString() ?? '';
+      final region = _cleanCellValue(row[colMap['region']!])?.toString() ?? '';
+      final testName = _cleanCellValue(row[colMap['testName']!])?.toString().toUpperCase() ?? '';
+      final resultYearStr = _cleanCellValue(row[colMap['year']!])?.toString() ?? '';
+      final resultValueStr = _cleanCellValue(row[colMap['value']!])?.toString() ?? '';
 
-      if (testName.isEmpty || resultValueStr.isEmpty) continue;
+      if (testName.isEmpty || resultValueStr.isEmpty) {
+        _invalidOrEmptyLinesCount++;
+        continue;
+      }
 
       final resultYear = int.tryParse(resultYearStr) ?? 2025;
       
@@ -511,7 +530,7 @@ class AnalysisProvider extends ChangeNotifier {
       }
 
       final hasId = colMap['id']! >= 0 && colMap['id']! < row.length;
-      final patientId = hasId ? row[colMap['id']!].trim() : '';
+      final patientId = hasId ? _cleanCellValue(row[colMap['id']!])?.toString().trim() ?? '' : '';
 
       rawList.add(RawRecord(
         patientId: patientId,
@@ -552,6 +571,9 @@ class AnalysisProvider extends ChangeNotifier {
     if (totalRowsAcrossSheets <= 1) {
       throw Exception('The uploaded workbook contains no data rows.');
     }
+    
+    _totalFileLinesCount = totalRowsAcrossSheets;
+    _invalidOrEmptyLinesCount = 0;
 
     for (var key in excel.tables.keys) {
       final Sheet sheet = excel.tables[key]!;
@@ -573,7 +595,10 @@ class AnalysisProvider extends ChangeNotifier {
 
       for (int i = startRow; i < maxRows; i++) {
         final row = sheet.rows[i];
-        if (row.isEmpty) continue;
+        if (row.isEmpty || row.every((c) => c?.value == null || (c?.value.toString().trim() ?? '').isEmpty)) {
+          _invalidOrEmptyLinesCount++;
+          continue;
+        }
 
         // Extract and clean values safely checking row bounds
         final genderVal = colMap['gender']! < row.length ? row[colMap['gender']!]?.value : null;
@@ -592,7 +617,10 @@ class AnalysisProvider extends ChangeNotifier {
         final resultValue = _cleanCellValue(valueVal);
         final patientId = _cleanCellValue(idVal)?.toString().trim() ?? '';
 
-        if (testName.isEmpty || resultValue == null) continue;
+        if (testName.isEmpty || resultValue == null) {
+          _invalidOrEmptyLinesCount++;
+          continue;
+        }
 
         final resultYear = int.tryParse(resultYearStr) ?? 2025;
         

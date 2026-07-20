@@ -1361,9 +1361,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildAuditSummaryBanner(BuildContext context, AnalysisProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fmtPatients = provider.totalPatientsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    
+    final fmtFileTotal = provider.totalFileLinesCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final fmtInvalid = provider.invalidOrEmptyLinesCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
     final fmtRecords = provider.totalRecordsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-    final fmtDuplicates = provider.duplicateRecordsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final fmtPatients = provider.totalPatientsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
 
     return Card(
       elevation: 3,
@@ -1407,22 +1409,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   runSpacing: 12,
                   children: [
                     _buildAuditItem(
-                      title: '1️⃣ عدد المرضى الفعلي (الحالات):',
-                      value: '$fmtPatients مريض',
-                      subtitle: 'تم دمج الفحوصات المكررة للشخص نفسه',
+                      title: '📄 إجمالي الأسطر في الملف:',
+                      value: '$fmtFileTotal سطر',
+                      subtitle: 'يشمل الفراغات والأسطر الناقصة',
                       color: AppColors.primaryTeal,
                     ),
+                    if (provider.invalidOrEmptyLinesCount > 0)
+                      _buildAuditItem(
+                        title: '⚠️ أسطر مستبعدة:',
+                        value: '$fmtInvalid سطر',
+                        subtitle: 'فارغة أو تنقصها النتيجة واسم الفحص',
+                        color: AppColors.dangerRed,
+                      ),
                     _buildAuditItem(
-                      title: '2️⃣ إجمالي أسطر وفحوصات الملف:',
+                      title: '✅ الأسطر والفحوصات الصالحة:',
                       value: '$fmtRecords فحصاً',
-                      subtitle: 'مجموع قراءات التحاليل في جميع الأسطر',
+                      subtitle: 'إجمالي قراءات التحاليل المعتمدة',
                       color: AppColors.accentIndigo,
                     ),
                     _buildAuditItem(
-                      title: '3️⃣ الفحوصات والزيارات المكررة:',
-                      value: '$fmtDuplicates فحصاً مكرراً',
-                      subtitle: 'تحاليل متعددة مأخوذة لنفس المرضى',
-                      color: AppColors.dangerRed,
+                      title: '👤 عدد المرضى الفعلي:',
+                      value: '$fmtPatients مريض',
+                      subtitle: 'بعد دمج جميع الفحوصات المتعددة',
+                      color: AppColors.warningOrange,
                     ),
                   ],
                 );
