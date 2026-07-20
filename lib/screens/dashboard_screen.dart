@@ -766,7 +766,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // 1.5 Data Audit Summary Banner
+                  _buildAuditSummaryBanner(context, provider),
+                  const SizedBox(height: 16),
 
                   // 2. Map & Region Table
                   Row(
@@ -1352,6 +1356,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAuditSummaryBanner(BuildContext context, AnalysisProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fmtPatients = provider.totalPatientsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final fmtRecords = provider.totalRecordsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final fmtDuplicates = provider.duplicateRecordsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.primaryTeal, width: 1.5),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: isDark
+                ? [AppColors.darkCard, AppColors.darkBg]
+                : [AppColors.primaryTeal.withOpacity(0.06), Colors.white],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.verified_outlined, color: AppColors.primaryTeal, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  'التدقيق النهائي والدقيق لإحصائيات ملفك (Final Data Audit)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppColors.lightTextPrimary,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: [
+                    _buildAuditItem(
+                      title: '1️⃣ عدد المرضى الفعلي (الحالات):',
+                      value: '$fmtPatients مريض',
+                      subtitle: 'تم دمج الفحوصات المكررة للشخص نفسه',
+                      color: AppColors.primaryTeal,
+                    ),
+                    _buildAuditItem(
+                      title: '2️⃣ إجمالي أسطر وفحوصات الملف:',
+                      value: '$fmtRecords فحصاً',
+                      subtitle: 'مجموع قراءات التحاليل في جميع الأسطر',
+                      color: AppColors.accentIndigo,
+                    ),
+                    _buildAuditItem(
+                      title: '3️⃣ الفحوصات والزيارات المكررة:',
+                      value: '$fmtDuplicates فحصاً مكرراً',
+                      subtitle: 'تحاليل متعددة مأخوذة لنفس المرضى',
+                      color: AppColors.dangerRed,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAuditItem({
+    required String title,
+    required String value,
+    required String subtitle,
+    required Color color,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+        const SizedBox(height: 2),
+        Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
     );
   }
 
