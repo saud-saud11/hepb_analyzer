@@ -749,6 +749,14 @@ class AnalysisProvider extends ChangeNotifier {
   int get malesCount => _filteredPatients.where((p) => p.gender.toLowerCase() == 'male' || p.gender.toLowerCase() == 'm').length;
   int get femalesCount => _filteredPatients.where((p) => p.gender.toLowerCase() == 'female' || p.gender.toLowerCase() == 'f').length;
 
+  int get duplicateRecordsCount {
+    final total = totalRecordsCount;
+    final patients = totalPatientsCount;
+    return total > patients ? total - patients : 0;
+  }
+
+  int get repeatPatientsCount => _filteredPatients.where((p) => p.totalTestsCount > 1).length;
+
   // Region Patient Counts (used for Saudi map outline)
   Map<String, int> get regionCounts {
     final Map<String, int> counts = {};

@@ -142,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Card 1
                 pw.Expanded(
                   child: pw.Container(
-                    padding: const pw.EdgeInsets.all(12),
+                    padding: const pw.EdgeInsets.all(10),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: borderLight),
                       borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
@@ -150,20 +150,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('Registry Patients', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                        pw.Text('Registry Patients', style: pw.TextStyle(fontSize: 9, color: textMuted)),
                         pw.SizedBox(height: 4),
-                        pw.Text('$total', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                        pw.Text('$total', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
                         pw.SizedBox(height: 2),
-                        pw.Text('${provider.malesCount} Males • ${provider.femalesCount} Females', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                        pw.Text('${provider.malesCount} M • ${provider.femalesCount} F', style: pw.TextStyle(fontSize: 7, color: textMuted)),
                       ],
                     ),
                   ),
                 ),
-                pw.SizedBox(width: 12),
+                pw.SizedBox(width: 8),
                 // Card 2
                 pw.Expanded(
                   child: pw.Container(
-                    padding: const pw.EdgeInsets.all(12),
+                    padding: const pw.EdgeInsets.all(10),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: borderLight),
                       borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
@@ -171,20 +171,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('Total Test Records', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                        pw.Text('Total Test Records', style: pw.TextStyle(fontSize: 9, color: textMuted)),
                         pw.SizedBox(height: 4),
-                        pw.Text('$totalTests', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                        pw.Text('$totalTests', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
                         pw.SizedBox(height: 2),
-                        pw.Text('$uniqueTests Clinical Markers Tracked', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                        pw.Text('$uniqueTests Clinical Markers', style: pw.TextStyle(fontSize: 7, color: textMuted)),
                       ],
                     ),
                   ),
                 ),
-                pw.SizedBox(width: 12),
-                // Card 3
+                pw.SizedBox(width: 8),
+                // Card 3: Duplicate / Repeat Records
                 pw.Expanded(
                   child: pw.Container(
-                    padding: const pw.EdgeInsets.all(12),
+                    padding: const pw.EdgeInsets.all(10),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: borderLight),
                       borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
@@ -192,11 +192,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('Regions Represented', style: pw.TextStyle(fontSize: 10, color: textMuted)),
+                        pw.Text('Duplicate Records', style: pw.TextStyle(fontSize: 9, color: textMuted)),
                         pw.SizedBox(height: 4),
-                        pw.Text('$regionsCount', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                        pw.Text('${provider.duplicateRecordsCount}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
                         pw.SizedBox(height: 2),
-                        pw.Text('Out of 13 Saudi Regions', style: pw.TextStyle(fontSize: 8, color: textMuted)),
+                        pw.Text('${provider.repeatPatientsCount} Repeat Patients', style: pw.TextStyle(fontSize: 7, color: textMuted)),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 8),
+                // Card 4
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: borderLight),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Regions Represented', style: pw.TextStyle(fontSize: 9, color: textMuted)),
+                        pw.SizedBox(height: 4),
+                        pw.Text('$regionsCount', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: secondaryColor)),
+                        pw.SizedBox(height: 2),
+                        pw.Text('Out of 13 Regions', style: pw.TextStyle(fontSize: 7, color: textMuted)),
                       ],
                     ),
                   ),
@@ -694,7 +715,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // 1. Stats Cards Grid
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      final double cardWidth = (constraints.maxWidth - 32) / 3;
+                      final bool isWide = constraints.maxWidth > 1100;
+                      final double cardWidth = isWide
+                          ? (constraints.maxWidth - 48) / 4
+                          : (constraints.maxWidth - 16) / 2;
                       return Wrap(
                         spacing: 16,
                         runSpacing: 16,
@@ -702,7 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _buildStatCard(
                             context,
                             title: 'Registry Patients',
-                            value: provider.totalPatientsCount.toString(),
+                            value: provider.totalPatientsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},'),
                             subtitle: '${provider.malesCount} Males • ${provider.femalesCount} Females',
                             icon: Icons.people_outline,
                             color: AppColors.primaryTealLight,
@@ -715,6 +739,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             subtitle: '${provider.totalUniqueTestsCount} Clinical Markers Tracked',
                             icon: Icons.biotech_outlined,
                             color: AppColors.accentIndigo,
+                            width: cardWidth,
+                          ),
+                          _buildStatCard(
+                            context,
+                            title: 'Duplicate / Repeat Entries',
+                            value: provider.duplicateRecordsCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},'),
+                            subtitle: '${provider.repeatPatientsCount} Repeat Patients / Multi-tests',
+                            icon: Icons.copy_all_outlined,
+                            color: AppColors.dangerRed,
                             width: cardWidth,
                           ),
                           _buildStatCard(

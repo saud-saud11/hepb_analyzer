@@ -53,6 +53,14 @@ class Patient {
     required this.testHistory,
   });
 
+  int get totalTestsCount {
+    int count = 0;
+    for (var history in testHistory.values) {
+      count += history.length;
+    }
+    return count;
+  }
+
   String get uniqueKey => '${gender}_${dateOfBirth}_$region'.toLowerCase();
 
   int getAgeInYear(int testYear) {
