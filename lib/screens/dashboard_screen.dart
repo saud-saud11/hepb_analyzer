@@ -688,6 +688,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // 0. Year Selection & Filter Bar
+                  _buildYearSelectorBar(context, provider),
+
                   // 1. Stats Cards Grid
                   LayoutBuilder(
                     builder: (context, constraints) {
@@ -1161,6 +1164,157 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildYearSelectorBar(BuildContext context, AnalysisProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final years = provider.availableYears;
+    final selectedYear = provider.selectedYear;
+
+    if (years.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 20),
+      elevation: selectedYear != 'All' ? 3 : 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: selectedYear != 'All'
+              ? AppColors.primaryTeal
+              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          width: selectedYear != 'All' ? 2 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: (selectedYear != 'All'
+                                ? AppColors.primaryTeal
+                                : AppColors.accentIndigo)
+                            .withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.calendar_month_rounded,
+                        color: selectedYear != 'All'
+                            ? AppColors.primaryTeal
+                            : AppColors.accentIndigo,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'استعراض وتصفية النتائج حسب السنة (Browse Results by Year)',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          selectedYear == 'All'
+                              ? 'عرض السجلات التراكمية لجميع السنوات (${provider.totalPatientsCount} مريض)'
+                              : 'تم تصفية البيانات لعرض سنة $selectedYear فقط (${provider.totalPatientsCount} مريض)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: selectedYear == 'All'
+                                ? Colors.grey
+                                : AppColors.primaryTeal,
+                            fontWeight: selectedYear == 'All'
+                                ? FontWeight.normal
+                                : FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (selectedYear != 'All')
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.dangerRed.withOpacity(0.1),
+                      foregroundColor: AppColors.dangerRed,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    label: const Text('إلغاء التصفية / جميع السنوات', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () => provider.setYearFilter('All'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: years.map((year) {
+                  final isSelected = selectedYear == year;
+                  final labelText = year == 'All' ? 'جميع السنوات (All)' : 'سنة $year';
+
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      selected: isSelected,
+                      avatar: isSelected
+                          ? const Icon(Icons.check_circle_rounded, size: 16, color: Colors.white)
+                          : Icon(
+                              year == 'All'
+                                  ? Icons.all_inclusive_rounded
+                                  : Icons.event_note_rounded,
+                              size: 16,
+                              color: isDark ? Colors.grey[400] : Colors.grey[700],
+                            ),
+                      label: Text(
+                        labelText,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontSize: 13,
+                          color: isSelected
+                              ? Colors.white
+                              : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
+                      selectedColor: AppColors.primaryTeal,
+                      backgroundColor: isDark ? AppColors.darkCard : Colors.grey[100],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: isSelected
+                              ? AppColors.primaryTeal
+                              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                        ),
+                      ),
+                      onSelected: (bool selected) {
+                        if (selected) {
+                          provider.setYearFilter(year);
+                        } else {
+                          provider.setYearFilter('All');
+                        }
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
