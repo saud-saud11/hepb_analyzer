@@ -5,9 +5,55 @@ import 'package:excel/excel.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/patient_model.dart';
 
+class RawRecord {
+  final String patientId;
+  final String gender;
+  final String dateOfBirth;
+  final String region;
+  final String testName;
+  final int year;
+  final dynamic value;
+  final int rowIndex;
+
+  RawRecord({
+    required this.patientId,
+    required this.gender,
+    required this.dateOfBirth,
+    required this.region,
+    required this.testName,
+    required this.year,
+    required this.value,
+    required this.rowIndex,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'patientId': patientId,
+        'gender': gender,
+        'dateOfBirth': dateOfBirth,
+        'region': region,
+        'testName': testName,
+        'year': year,
+        'value': value,
+        'rowIndex': rowIndex,
+      };
+
+  factory RawRecord.fromJson(Map<String, dynamic> json) => RawRecord(
+        patientId: json['patientId'] ?? '',
+        gender: json['gender'] ?? '',
+        dateOfBirth: json['dateOfBirth'] ?? '',
+        region: json['region'] ?? '',
+        testName: json['testName'] ?? '',
+        year: json['year'] ?? 2025,
+        value: json['value'],
+        rowIndex: json['rowIndex'] ?? 0,
+      );
+}
+
 class AnalysisProvider extends ChangeNotifier {
   List<Patient> _allPatients = [];
   List<Patient> _filteredPatients = [];
+  List<RawRecord> _rawRecords = [];
+  String _groupingMode = 'demographics'; // 'demographics' (recommended), 'id', 'row'
   bool _isLoading = false;
   double _parseProgress = 0.0;
   String? _fileName;
@@ -32,6 +78,7 @@ class AnalysisProvider extends ChangeNotifier {
   // Getters
   List<Patient> get patients => _filteredPatients;
   List<Patient> get allPatients => _allPatients;
+  String get groupingMode => _groupingMode;
   bool get isLoading => _isLoading;
   double get parseProgress => _parseProgress;
   String? get fileName => _fileName;
@@ -67,6 +114,13 @@ class AnalysisProvider extends ChangeNotifier {
 
   void _loadCachedData() {
     try {
+      _groupingMode = _cacheBox.get('grouping_mode') ?? 'demographics';
+      final cachedRaw = _cacheBox.get('raw_records');
+      if (cachedRaw != null && cachedRaw is List) {
+        _rawRecords = cachedRaw
+            .map((item) => RawRecord.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
       final cachedList = _cacheBox.get('patients_list');
       if (cachedList != null && cachedList is List) {
         _allPatients = cachedList
@@ -82,6 +136,67 @@ class AnalysisProvider extends ChangeNotifier {
     }
   }
 
+  void setGroupingMode(String mode) {
+    if (_groupingMode != mode) {
+      _groupingMode = mode;
+      _cacheBox.put('grouping_mode', mode);
+      _groupRawRecords();
+    }
+  }
+
+  void _groupRawRecords() {
+    if (_rawRecords.isEmpty) return;
+
+    final Map<String, Patient> tempPatientMap = {};
+
+    for (var rec in _rawRecords) {
+      String key;
+      if (_groupingMode == 'id' && rec.patientId.isNotEmpty) {
+        key = 'id_${rec.patientId}'.toLowerCase();
+      } else if (_groupingMode == 'row') {
+        key = 'row_${rec.rowIndex}';
+      } else {
+        // Default 'demographics' mode: group by Gender + DOB + Region
+        key = '${rec.gender}_${rec.dateOfBirth}_${rec.region}'.toLowerCase();
+      }
+
+      Patient patient;
+      if (tempPatientMap.containsKey(key)) {
+        patient = tempPatientMap[key]!;
+      } else {
+        patient = Patient(
+          gender: rec.gender,
+          dateOfBirth: rec.dateOfBirth,
+          region: rec.region,
+          testHistory: {},
+        );
+        tempPatientMap[key] = patient;
+      }
+
+      if (!patient.testHistory.containsKey(rec.testName)) {
+        patient.testHistory[rec.testName] = {};
+      }
+      patient.testHistory[rec.testName]![rec.year] = rec.value;
+    }
+
+    _allPatients = tempPatientMap.values.toList();
+    _updateFiltersList();
+    _applyFilters();
+    _saveToCache();
+  }
+
+  void _saveToCache() {
+    try {
+      _cacheBox.put('patients_list', _allPatients.map((p) => p.toJson()).toList());
+      _cacheBox.put('file_name', _fileName);
+      _cacheBox.put('file_size', _fileSize);
+      _cacheBox.put('grouping_mode', _groupingMode);
+      if (_rawRecords.length <= 100000) {
+        _cacheBox.put('raw_records', _rawRecords.map((r) => r.toJson()).toList());
+      }
+    } catch (_) {}
+  }
+
   Future<void> clearCache() async {
     _isLoading = true;
     notifyListeners();
@@ -89,6 +204,8 @@ class AnalysisProvider extends ChangeNotifier {
       await _cacheBox.clear();
       _allPatients = [];
       _filteredPatients = [];
+      _rawRecords = [];
+      _groupingMode = 'demographics';
       _fileName = null;
       _fileSize = null;
       _availableRegions = [];
@@ -367,7 +484,7 @@ class AnalysisProvider extends ChangeNotifier {
 
     final startIdx = headerRowIdx + 1;
     final int totalLinesToProcess = rows.length - startIdx;
-    final Map<String, Patient> tempPatientMap = {};
+    final List<RawRecord> rawList = [];
     int processedLinesCount = 0;
 
     for (int i = startIdx; i < rows.length; i++) {
@@ -396,27 +513,16 @@ class AnalysisProvider extends ChangeNotifier {
       final hasId = colMap['id']! >= 0 && colMap['id']! < row.length;
       final patientId = hasId ? row[colMap['id']!].trim() : '';
 
-      final key = patientId.isNotEmpty 
-          ? 'id_$patientId'.toLowerCase() 
-          : '${gender}_${dob}_$region'.toLowerCase();
-
-      Patient patient;
-      if (tempPatientMap.containsKey(key)) {
-        patient = tempPatientMap[key]!;
-      } else {
-        patient = Patient(
-          gender: gender,
-          dateOfBirth: dob,
-          region: region,
-          testHistory: {},
-        );
-        tempPatientMap[key] = patient;
-      }
-
-      if (!patient.testHistory.containsKey(testName)) {
-        patient.testHistory[testName] = {};
-      }
-      patient.testHistory[testName]![resultYear] = resultValue;
+      rawList.add(RawRecord(
+        patientId: patientId,
+        gender: gender,
+        dateOfBirth: dob,
+        region: region,
+        testName: testName,
+        year: resultYear,
+        value: resultValue,
+        rowIndex: i,
+      ));
 
       processedLinesCount++;
 
@@ -427,14 +533,14 @@ class AnalysisProvider extends ChangeNotifier {
       }
     }
 
-    _allPatients = tempPatientMap.values.toList();
-    _updateFiltersList();
+    _rawRecords = rawList;
+    _groupRawRecords();
   }
 
   // Optimized Excel Parser with Dynamic Columns & Scrambled Header Support
   Future<void> _parseExcelFile(Uint8List bytes) async {
     final Excel excel = Excel.decodeBytes(bytes);
-    final Map<String, Patient> tempPatientMap = {};
+    final List<RawRecord> rawList = [];
     int processedRowsCount = 0;
 
     // Sum total rows across all sheets for progress calculation
@@ -490,27 +596,16 @@ class AnalysisProvider extends ChangeNotifier {
 
         final resultYear = int.tryParse(resultYearStr) ?? 2025;
         
-        final keyPatient = patientId.isNotEmpty 
-            ? 'id_$patientId'.toLowerCase() 
-            : '${gender}_${dob}_$region'.toLowerCase();
-
-        Patient patient;
-        if (tempPatientMap.containsKey(keyPatient)) {
-          patient = tempPatientMap[keyPatient]!;
-        } else {
-          patient = Patient(
-            gender: gender,
-            dateOfBirth: dob,
-            region: region,
-            testHistory: {},
-          );
-          tempPatientMap[keyPatient] = patient;
-        }
-
-        if (!patient.testHistory.containsKey(testName)) {
-          patient.testHistory[testName] = {};
-        }
-        patient.testHistory[testName]![resultYear] = resultValue;
+        rawList.add(RawRecord(
+          patientId: patientId,
+          gender: gender,
+          dateOfBirth: dob,
+          region: region,
+          testName: testName,
+          year: resultYear,
+          value: resultValue,
+          rowIndex: i,
+        ));
 
         processedRowsCount++;
 
@@ -522,8 +617,8 @@ class AnalysisProvider extends ChangeNotifier {
       }
     }
 
-    _allPatients = tempPatientMap.values.toList();
-    _updateFiltersList();
+    _rawRecords = rawList;
+    _groupRawRecords();
   }
 
   // Start Manual Registry from scratch

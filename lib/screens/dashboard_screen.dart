@@ -709,7 +709,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 0. Year Selection & Filter Bar
+                  // 0. Patient Grouping Strategy Bar
+                  _buildGroupingModeBar(context, provider),
+
+                  // 0.5 Year Selection & Filter Bar
                   _buildYearSelectorBar(context, provider),
 
                   // 1. Stats Cards Grid
@@ -1349,6 +1352,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildGroupingModeBar(BuildContext context, AnalysisProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentMode = provider.groupingMode;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: isDark
+                ? [AppColors.darkCard, AppColors.darkBackground]
+                : [Colors.teal.shade50.withOpacity(0.4), Colors.white],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.group_work_outlined, size: 20, color: AppColors.primaryTeal),
+                const SizedBox(width: 8),
+                const Text(
+                  'طريقة دمج وحساب المرضى (Patient Grouping Mode)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryTeal.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    currentMode == 'demographics'
+                        ? 'موصى به: دمج بالفئات الديموغرافية'
+                        : (currentMode == 'id' ? 'دمج بالمعرف الشخصي' : 'بدون دمج (سطر بسطر)'),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryTeal),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildGroupingChip(
+                    context,
+                    label: '👥 البيانات الديموغرافية (الجنس + الميلاد + المنطقة)',
+                    isSelected: currentMode == 'demographics',
+                    onTap: () => provider.setGroupingMode('demographics'),
+                    isRecommended: true,
+                  ),
+                  const SizedBox(width: 8),
+                  _buildGroupingChip(
+                    context,
+                    label: '🆔 معرف المريض (patient_personal_id)',
+                    isSelected: currentMode == 'id',
+                    onTap: () => provider.setGroupingMode('id'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildGroupingChip(
+                    context,
+                    label: '📄 كل سطر سجل مستقل (1 Row = 1 Patient)',
+                    isSelected: currentMode == 'row',
+                    onTap: () => provider.setGroupingMode('row'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupingChip(
+    BuildContext context, {
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    bool isRecommended = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ChoiceChip(
+      selected: isSelected,
+      avatar: isSelected
+          ? const Icon(Icons.check_circle_rounded, size: 16, color: Colors.white)
+          : (isRecommended
+              ? const Icon(Icons.star_rounded, size: 16, color: AppColors.warningAmber)
+              : null),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          fontSize: 12,
+          color: isSelected ? Colors.white : (isDark ? Colors.white : Colors.black87),
+        ),
+      ),
+      selectedColor: AppColors.primaryTeal,
+      backgroundColor: isDark ? AppColors.darkCard : Colors.grey[100],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: isSelected
+              ? AppColors.primaryTeal
+              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
+      ),
+      onSelected: (_) => onTap(),
     );
   }
 
